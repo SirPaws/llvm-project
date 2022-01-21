@@ -608,7 +608,7 @@ void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
 ExprResult Sema::ImpCastExprToType(Expr *E, QualType Ty,
                                    CastKind Kind, ExprValueKind VK,
                                    const CXXCastPath *BasePath,
-                                   CheckedConversionKind CCK) {
+                                   CheckedConversionKind CCK, bool IsForCallExpr) {
 #ifndef NDEBUG
   if (VK == VK_PRValue && !E->isPRValue()) {
     switch (Kind) {
@@ -677,6 +677,25 @@ ExprResult Sema::ImpCastExprToType(Expr *E, QualType Ty,
       ImpCast->setType(Ty);
       ImpCast->setValueKind(VK);
       return E;
+    }
+  }
+
+  // Downgrade DeclRefExpr's for Transparent Aliases here,
+  // but only for non-Call expressions!
+  if (!IsForCallExpr) {
+    DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreParenCasts());
+    if (DRE != nullptr) {
+      Decl *DREDecl = DRE->getDecl();
+      TransparentAliasAttr *TAAttr =
+          DREDecl != nullptr ? DREDecl->getAttr<TransparentAliasAttr>()
+                             : nullptr;
+      if (TAAttr != nullptr) {
+        NamedDecl *NDTarget = TAAttr->getTargetDecl();
+        ValueDecl *VDTarget = dyn_cast<ValueDecl>(NDTarget);
+        if (VDTarget != nullptr) {
+          DRE->setDecl(VDTarget);
+        }
+      }
     }
   }
 
@@ -867,6 +886,7 @@ static void checkUndefinedButUsed(Sema &S) {
       // be defined anywhere else, so the program must necessarily violate the
       // one definition rule.
       bool IsImplicitBase = false;
+      bool SuppressUndefinedInternal = false;
       if (const auto *BaseD = dyn_cast<FunctionDecl>(VD)) {
         auto *DVAttr = BaseD->getAttr<OMPDeclareVariantAttr>();
         if (DVAttr && !DVAttr->getTraitInfo().isExtensionActive(
@@ -877,8 +897,14 @@ static void checkUndefinedButUsed(Sema &S) {
           IsImplicitBase = BaseD->isImplicit() &&
                            Func->getIdentifier()->isMangledOpenMPVariantName();
         }
+        auto *TAAttr = BaseD->getAttr<TransparentAliasAttr>();
+        if (TAAttr) {
+          // It is okay: transparent function aliases do not need a definition.
+          SuppressUndefinedInternal = true;
+        }
       }
-      if (!S.getLangOpts().OpenMP || !IsImplicitBase)
+      if (!SuppressUndefinedInternal &&
+          (!S.getLangOpts().OpenMP || !IsImplicitBase))
         S.Diag(VD->getLocation(), diag::warn_undefined_internal)
             << isa<VarDecl>(VD) << VD;
     } else if (auto *FD = dyn_cast<FunctionDecl>(VD)) {

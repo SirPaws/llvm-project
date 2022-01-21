@@ -837,6 +837,21 @@ bool isEquivalent(AsmLabelAttr *Other) const {
 }];
 }
 
+def TransparentAlias : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
+  // It is used to mark N2901 Transparent Function Alias declarations,
+  // but may be extended to other declarations / variables.
+  let Spellings = [];
+  let Args = [
+    // Whether or not this is a "weak" transparent alias or not.
+    BoolArgument<"IsWeak", /*optional=*/0, /*fake=*/1>,
+    // The Declaration this transparent alias is attached to
+    DeclArgument<Named, "TargetDecl">
+  ];
+  let SemaHandler = 0;
+  let Documentation = [Undocumented];
+}
+
 def Availability : InheritableAttr {
   let Spellings = [Clang<"availability">];
   let Args = [IdentifierArgument<"platform">, VersionArgument<"introduced">,

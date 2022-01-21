@@ -605,6 +605,17 @@ def err_using_enum_decl_redeclaration : Error<
   "redeclaration of using-enum declaration">;
 def note_using_enum_decl : Note<"%select{|previous }0using-enum declaration">;
 
+def err_transparent_alias_bad_target : Error<
+  "%0 is not a valid transparent alias target">;
+def err_transparent_alias_cannot_redeclare : Error<
+  "%0 cannot be redeclared as a transparent alias because it already exists "
+  "as a %select{function declaration|variable declaration}1">;
+def err_transparent_alias_bad_redeclaration : Error<
+  "redeclaration of transparent alias %0 does not resolve to the same entity "
+  "as the previous declaration %1; expected %2">;
+def err_transparent_alias_redeclaration_to_non_alias : Error<
+  "%0 cannot be redeclared as it is already a transparent alias">;
+
 def warn_access_decl_deprecated : Warning<
   "access declarations are deprecated; use using declarations instead">,
   InGroup<Deprecated>;

@@ -6711,6 +6711,30 @@ static void checkDLLAttributeRedeclaration(Sema &S, NamedDecl *OldDecl,
   }
 }
 
+static void checkTransparentAliasRedeclaration(Sema &S,
+                                               NamedDecl *RepresentativeDecl,
+                                               NamedDecl *NewDecl) {
+    TransparentAliasAttr* TAAttr = RepresentativeDecl->getAttr<TransparentAliasAttr>();
+    if (TAAttr == nullptr) {
+      return;
+    }
+    // If it's weak, it's fine to scribble over it entirely.
+    if (TAAttr->getIsWeak()) {
+      return;
+    }
+    // Otherwise, it had better be a proper redeclaration with compatible types...
+    QualType RepresentativeDeclType(RepresentativeDecl->getFunctionType(), 0);
+    QualType NewDeclType(NewDecl->getFunctionType(), 0);
+    if (S.Context.typesAreCompatible(RepresentativeDeclType, NewDeclType)) {
+      return;
+    }
+    // if it is not weak or compatible, then this is a constraint violation!
+    S.Diag(NewDecl->getLocation(),
+           diag::err_transparent_alias_redeclaration_to_non_alias)
+        << RepresentativeDecl;
+    NewDecl->setInvalidDecl(true);
+}
+
 /// Given that we are within the definition of the given function,
 /// will that definition behave like C99's 'inline', where the
 /// definition is discarded except for optimization purposes?
@@ -9027,12 +9051,178 @@ static DeclContext *getTagInjectionContext(DeclContext *DC) {
 /// nothing.
 static Scope *getTagInjectionScope(Scope *S, const LangOptions &LangOpts) {
   while (S->isClassScope() ||
-         (LangOpts.CPlusPlus &&
-          S->isFunctionPrototypeScope()) ||
+         (LangOpts.CPlusPlus && S->isFunctionPrototypeScope()) ||
          ((S->getFlags() & Scope::DeclScope) == 0) ||
          (S->getEntity() && S->getEntity()->isTransparentContext()))
     S = S->getParent();
   return S;
+}
+
+/// Find the Transparent Function Alias, optionally the most derived one.
+static bool lookupMaybeTransparentAliasDecl(
+    NamedDecl **DeclOut, bool *IsTransparentAliasOut, bool *IsWeak, int* SucessfulLookupsOut,
+    Sema &SemaRef, Scope *CurScope, DeclarationName NameDN,
+    SourceLocation NameLoc, const LangOptions &, bool MostDerived = false) {
+  *DeclOut = nullptr;
+  *IsTransparentAliasOut = false;
+  *IsWeak = false;
+  *SucessfulLookupsOut = 0;
+  LookupResult NewNameLookup(SemaRef, NameDN, NameLoc,
+                             Sema::LookupOrdinaryName);
+  if (!SemaRef.LookupName(NewNameLookup, CurScope)) {
+    return false;
+  }
+  // we found something. Need to check if it's compatible/overridable?
+  NamedDecl *FoundDecl = NewNameLookup.getFoundDecl();
+  *DeclOut = FoundDecl;
+  if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
+    *SucessfulLookupsOut += 1;
+    if (TransparentAliasAttr *TAAttr =
+            FnDecl->getAttr<TransparentAliasAttr>()) {
+      *IsWeak = TAAttr->getIsWeak();
+      *IsTransparentAliasOut = true;
+      if (MostDerived) {
+       *DeclOut = TAAttr->getTargetDecl();
+        *IsTransparentAliasOut = false;
+        *IsWeak = false;
+      }
+    } else {
+      *IsWeak = false;
+      *IsTransparentAliasOut = false;
+    }
+  }
+  return *DeclOut != nullptr && *SucessfulLookupsOut > 0;
+}
+
+NamedDecl *Sema::ActOnTransparentAliasDeclaration(
+    Scope *CurScope, SourceLocation AliasLoc, bool IsWeak,
+    SourceLocation WeakLoc, IdentifierInfo &NewName, SourceLocation NewNameLoc,
+    IdentifierInfo &OldName, SourceLocation OldNameLoc,
+    const ParsedAttributesView &DeclarationAttrList,
+    const ParsedAttributesView &AliasAttrList) {
+  StringRef OldNameStr = OldName.getName();
+  StringRef NewNameStr = NewName.getName();
+  DeclarationName OldNameDN(&OldName);
+  NamedDecl *OldDecl = nullptr;
+  bool OldTargetIsTransparentAlias = false;
+  bool OldTargetIsWeak = false;
+  int OldTargetSuccessfulLookups = 0;
+  bool OldTargetLookup = lookupMaybeTransparentAliasDecl(
+      &OldDecl, &OldTargetIsTransparentAlias, &OldTargetIsWeak,
+      &OldTargetSuccessfulLookups, *this, CurScope, OldNameDN, OldNameLoc,
+      LangOpts, true);
+  if (!OldTargetLookup) {
+    if (OldDecl != nullptr) {
+      // we were able to look things up, but it was not
+      // a function!
+      Diag(OldNameLoc, diag::err_transparent_alias_bad_target)
+          << &OldName;
+      return nullptr;
+    } else {
+      Diag(OldNameLoc, diag::err_undeclared_var_use) << &OldName;
+      return nullptr;
+    }
+  }
+
+  DeclarationName NewNameDN(&NewName);
+  NamedDecl *NewDeclLookup = nullptr;
+  bool NewIsTransparentAlias = false;
+  bool NewIsWeak = false;
+  int NewSuccesfulLookups = 0;
+  // If we don't find the new name, then we don't have to do anything.
+  // But if we DO find the new name (after one level of lookup)...
+  if (lookupMaybeTransparentAliasDecl(&NewDeclLookup, &NewIsTransparentAlias,
+                                      &NewIsWeak, &NewSuccesfulLookups, *this,
+                                      CurScope, NewNameDN, NewNameLoc, LangOpts,
+                                      false)) {
+    // Check if it's defined in the same scope. If it is, then we have to worry!
+    if (CurScope->isDeclScope(NewDeclLookup)) {
+      // It'd better be a weak alias, otherwise we have to
+      // check if it resolves to the same thing we're about to define it to be!
+      if (!NewIsTransparentAlias) {
+        Diag(NewNameLoc, diag::err_transparent_alias_cannot_redeclare)
+            << NewDeclLookup << 0;
+        return nullptr;
+      }
+      // okay, we have a transparent alias! check it over
+      if (!NewIsWeak) {
+        // the decls we are about to define better match EXACTLY, or we're
+        // in trouble
+        NamedDecl *NewTargetDeclLookup = nullptr;
+        bool NewTargetIsTransparentAlias = false;
+        bool NewTargetIsWeak = false;
+        int NewTargetSuccesfulLookups = 0;
+        bool NewTargetLookup = lookupMaybeTransparentAliasDecl(
+            &NewTargetDeclLookup, &NewTargetIsTransparentAlias,
+            &NewTargetIsWeak, &NewTargetSuccesfulLookups, *this, CurScope,
+            NewNameDN, NewNameLoc, LangOpts, true);
+        (void)NewTargetLookup;
+        assert(NewTargetLookup &&
+               "if we found a new target before, this should "
+               "not suddenly fail us now!");
+        if (OldDecl != NewTargetDeclLookup) {
+          // They are not equal: issue a diagnostic and get out of here.
+          Diag(NewNameLoc, diag::err_transparent_alias_bad_redeclaration)
+              << &NewName << &OldName << OldDecl;
+          return nullptr;
+        } else {
+          // The declarations are exactly the same.
+          // That means, if the new name is the same as the old one,
+          // we need to simply bail because the job is done.
+          // FIXME: add attributes from this declaration to previous one!
+          if (OldNameStr == NewNameStr)
+            return NewDeclLookup;
+        }
+      } else {
+        // if it's new and weak, it must be destroyed:
+        // NewIsWeak being true is all that's needed
+        // to detect this case.
+        // FIXME: redeclaration of weak aliases is currently not implemented T_T
+        Diag(NewNameLoc, diag::err_unavailable)
+            << "_Weak _Alias redeclarations are not implemented: it";
+        return nullptr;
+      }
+    }
+  }
+  FunctionDecl *OldFunctionDecl = OldDecl->getAsFunction();
+  QualType NewType = OldFunctionDecl->getType();
+  StringRef TrueOldName = OldFunctionDecl->getName();
+  DeclContext *DC = CurScope->getEntity();
+  // We want a static function, since under no circumstances should this leak
+  // beyond the parameters of this translation unit!
+  FunctionDecl *NewDecl = FunctionDecl::Create(
+      Context, DC, AliasLoc, NewNameLoc, NewNameDN, NewType, nullptr, SC_Static,
+      false, false, OldFunctionDecl->hasWrittenPrototype(),
+      OldFunctionDecl->getConstexprKind(), nullptr);
+  // Create Decl objects for each parameter, adding them to the
+  // FunctionDecl.
+  if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(NewType)) {
+    SmallVector<ParmVarDecl *, 16> Params;
+    for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
+      ParmVarDecl *parm = ParmVarDecl::Create(
+          Context, NewDecl, SourceLocation(), SourceLocation(), nullptr,
+          FT->getParamType(i), /*TInfo=*/nullptr, SC_None, nullptr);
+      parm->setScopeInfo(0, i);
+      Params.push_back(parm);
+    }
+    NewDecl->setParams(Params);
+  }
+  NewDecl->setImplicit(OldDecl->isImplicit());
+  ProcessDeclAttributeList(CurScope, NewDecl, AliasAttrList);
+  ProcessDeclAttributeList(CurScope, NewDecl, DeclarationAttrList);
+  // Gives us the equivalent of adding the asm label: void foo (void) asm("bar")
+  // Model the new function declaration after the asm("...")
+  // label extension, which gives us teh functionality we want!
+  // Make sure to use the ACTUAL most derived old name!
+  NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
+                                        /*IsLiteralLabel=*/true, OldNameLoc));
+  if (IsWeak) {
+    // Mark the function declaration as weak!
+    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, AttributeCommonInfo::AS_Keyword));
+  }
+  NewDecl->addAttr(TransparentAliasAttr::Create(Context, IsWeak, OldFunctionDecl, AliasLoc));
+  PushOnScopeChains(NewDecl, CurScope);
+  return NewDecl;
 }
 
 NamedDecl*
@@ -9954,6 +10144,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
 
   if (D.isRedeclaration() && !Previous.empty()) {
     NamedDecl *Prev = Previous.getRepresentativeDecl();
+    checkTransparentAliasRedeclaration(*this, Prev, NewFD);
     checkDLLAttributeRedeclaration(*this, Prev, NewFD,
                                    isMemberSpecialization ||
                                        isFunctionTemplateSpecialization,
@@ -10996,7 +11187,34 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
   }
 
   if (Redeclaration) {
-    // NewFD and OldDecl represent declarations that need to be
+    if (TransparentAliasAttr *TAAttr =
+            OldDecl->getAttr<TransparentAliasAttr>()) {
+      if (TAAttr->getIsWeak()) {
+        // if the OldDecl is a transparent function alias, blow it up out of
+        // existence and return false if and only if it's a weak one
+        // (The Non-weak case is handled up-stream in a different case.)
+        DeclContext *OldContext = OldDecl->getLexicalDeclContext();
+        DeclContext *NewContext = NewFD->getLexicalDeclContext();
+        IdentifierResolver::iterator I = IdResolver.begin(NewFD->getDeclName()),
+                                     IEnd = IdResolver.end();
+        for (; I != IEnd; ++I) {
+          // iterate through and destroy all previous transparent alias
+          // declarations
+          if (S->isDeclScope(*I)) {
+            S->RemoveDecl(*I);
+            IdResolver.RemoveDecl(*I);
+          }
+        }
+        if (OldContext->isDeclInLexicalTraversal(OldDecl))
+          OldContext->removeDecl(OldDecl);
+        if (OldContext != NewContext &&
+            NewContext->isDeclInLexicalTraversal(OldDecl))
+          NewContext->removeDecl(OldDecl);
+        return false;
+      }
+    }
+
+    // Otherwise, NewFD and OldDecl represent declarations that may need to be
     // merged.
     if (MergeFunctionDecl(NewFD, OldDecl, S, MergeTypeWithPrevious)) {
       NewFD->setInvalidDecl();

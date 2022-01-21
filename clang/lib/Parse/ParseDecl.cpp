@@ -1704,6 +1704,7 @@ void Parser::stripTypeAttributesOffDeclSpec(ParsedAttributesWithRange &Attrs,
 ///       declaration: [C99 6.7]
 ///         block-declaration ->
 ///           simple-declaration
+/// [C:N2901] alias-declaration
 ///           others                   [FIXME]
 /// [C++]   template-declaration
 /// [C++]   namespace-definition
@@ -1743,6 +1744,10 @@ Parser::ParseDeclaration(DeclaratorContext Context, SourceLocation &DeclEnd,
   case tok::kw_using:
     return ParseUsingDirectiveOrDeclaration(Context, ParsedTemplateInfo(),
                                             DeclEnd, attrs);
+  case tok::kw__Alias:
+  case tok::kw__Weak:
+    SingleDecl = ParseTransparentAlias(Context, DeclEnd, attrs);
+    break;
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
     ProhibitAttributes(attrs);
@@ -1756,6 +1761,57 @@ Parser::ParseDeclaration(DeclaratorContext Context, SourceLocation &DeclEnd,
   // This routine returns a DeclGroup, if the thing we parsed only contains a
   // single decl, convert it now.
   return Actions.ConvertDeclToDeclGroup(SingleDecl);
+}
+
+/// This routine covers the _Alias declarations in N2901,
+/// Transparent Function Aliases. Internally, we treat it as effectively a
+/// function declaration the first identifier, set with an AsmLabel of the
+/// second identifier. Attributes are applied to the newly created function
+/// declaration, which should match the behavior we want.
+///   alias-declaration:
+///     '_Alias' alias-specifier[opt] identifier
+///       attribute-specifier-seq[opt] '=' identifier ';'
+///   alias-specifier:
+///     '(weak)'
+Decl*
+Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd,
+                         ParsedAttributesWithRange &attrs) {
+  bool IsWeak = false;
+  SourceLocation WeakLoc;
+  if (Tok.is(tok::kw__Weak)) {
+    IsWeak = true;
+    WeakLoc = Tok.getLocation();
+    ConsumeToken();
+  }
+  SourceLocation AliasLoc = Tok.getLocation();
+  if (ExpectAndConsume(tok::kw__Alias)) {
+    return nullptr;
+  }
+  if (expectIdentifier()) {
+    return nullptr;
+  }
+  IdentifierInfo &NewAlias = *Tok.getIdentifierInfo();
+  SourceLocation NewAliasLoc = Tok.getLocation();
+  ConsumeToken();
+  
+  ParsedAttributesWithRange AttrsOnAlias(AttrFactory);
+  MaybeParseCXX11Attributes(AttrsOnAlias);
+  if (ExpectAndConsume(tok::equal)) {
+    return nullptr;
+  }
+  if (expectIdentifier()) {
+    return nullptr;
+  }
+  IdentifierInfo &OldAlias = *Tok.getIdentifierInfo();
+  SourceLocation OldAliasLoc = Tok.getLocation();
+  ConsumeToken();
+  DeclEnd = Tok.getLocation();
+  if (ExpectAndConsumeSemi(diag::err_expected)) {
+    return nullptr;
+  }
+  return Actions.ActOnTransparentAliasDeclaration(
+      getCurScope(), AliasLoc, IsWeak, WeakLoc, NewAlias, NewAliasLoc, OldAlias, OldAliasLoc,
+      attrs, AttrsOnAlias);
 }
 
 ///       simple-declaration: [C99 6.7: declaration] [C++ 7p1: dcl.dcl]
@@ -5327,6 +5383,10 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
 
     // GNU attributes.
   case tok::kw___attribute:
+
+    // N2901 _Alias
+  case tok::kw__Alias:
+  case tok::kw__Weak:
 
     // C++11 decltype and constexpr.
   case tok::annot_decltype:

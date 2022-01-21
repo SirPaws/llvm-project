@@ -657,6 +657,10 @@ KEYWORD(_Nullable                , KEYALL)
 KEYWORD(_Nullable_result         , KEYALL)
 KEYWORD(_Null_unspecified        , KEYALL)
 
+// N2901 Transparent Function Aliases
+KEYWORD(_Alias                   , KEYALL)
+KEYWORD(_Weak                   , KEYALL)
+
 // Microsoft extensions which should be disabled in strict conformance mode
 KEYWORD(__ptr64                       , KEYMS)
 KEYWORD(__ptr32                       , KEYMS)
