@@ -2977,6 +2977,13 @@ public:
                                      bool &AddToScope);
   bool AddOverriddenMethods(CXXRecordDecl *DC, CXXMethodDecl *MD);
 
+  NamedDecl *ActOnTransparentAliasDeclaration(
+      Scope *S, SourceLocation AliasLoc, bool IsWeak, SourceLocation WeakLoc,
+      IdentifierInfo &NewName, SourceLocation NewNameLoc,
+      IdentifierInfo &OldName, SourceLocation OldNameLoc,
+      const ParsedAttributesView &DeclarationAttrList,
+      const ParsedAttributesView &AliasAttrList);
+
   enum class CheckConstexprKind {
     /// Diagnose issues that are non-constant or that are extensions.
     Diagnose,
@@ -12616,7 +12623,7 @@ public:
   ImpCastExprToType(Expr *E, QualType Type, CastKind CK,
                     ExprValueKind VK = VK_PRValue,
                     const CXXCastPath *BasePath = nullptr,
-                    CheckedConversionKind CCK = CCK_ImplicitConversion);
+                    CheckedConversionKind CCK = CCK_ImplicitConversion, bool IsForCallExpr = false);
 
   /// ScalarTypeToBooleanCastKind - Returns the cast kind corresponding
   /// to the conversion from scalar type ScalarTy to the Boolean type.
