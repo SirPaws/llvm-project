@@ -50,6 +50,7 @@ namespace clang {
 class ASTContext;
 class ASTReader;
 class Attr;
+class BinarySearchOptions;
 class CXXRecordDecl;
 class FileEntry;
 class FPOptionsOverride;

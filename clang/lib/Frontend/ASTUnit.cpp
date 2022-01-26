@@ -516,6 +516,7 @@ namespace {
 class ASTInfoCollector : public ASTReaderListener {
   Preprocessor &PP;
   ASTContext *Context;
+  BinarySearchOptions &BinaryOpts;
   HeaderSearchOptions &HSOpts;
   PreprocessorOptions &PPOpts;
   LangOptions &LangOpt;
@@ -527,11 +528,11 @@ class ASTInfoCollector : public ASTReaderListener {
 
 public:
   ASTInfoCollector(Preprocessor &PP, ASTContext *Context,
-                   HeaderSearchOptions &HSOpts, PreprocessorOptions &PPOpts,
+                   BinarySearchOptions &BOpts, HeaderSearchOptions &HSOpts, PreprocessorOptions &PPOpts,
                    LangOptions &LangOpt,
                    std::shared_ptr<TargetOptions> &TargetOpts,
                    IntrusiveRefCntPtr<TargetInfo> &Target, unsigned &Counter)
-      : PP(PP), Context(Context), HSOpts(HSOpts), PPOpts(PPOpts),
+      : PP(PP), Context(Context), BinaryOpts(BOpts), HSOpts(HSOpts), PPOpts(PPOpts),
         LangOpt(LangOpt), TargetOpts(TargetOpts), Target(Target),
         Counter(Counter) {}
 
@@ -828,7 +829,7 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
   HeaderSearch &HeaderInfo = *AST->HeaderInfo;
 
   AST->PP = std::make_shared<Preprocessor>(
-      AST->PPOpts, AST->getDiagnostics(), *AST->LangOpts,
+      AST->PPOpts, AST->getDiagnostics(), *AST->LangOpts, *AST->BinaryOpts,
       AST->getSourceManager(), HeaderInfo, AST->ModuleLoader,
       /*IILookup=*/nullptr,
       /*OwnsHeaderSearch=*/false);
@@ -851,8 +852,8 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
 
   unsigned Counter = 0;
   AST->Reader->setListener(std::make_unique<ASTInfoCollector>(
-      *AST->PP, AST->Ctx.get(), *AST->HSOpts, *AST->PPOpts, *AST->LangOpts,
-      AST->TargetOpts, AST->Target, Counter));
+      *AST->PP, AST->Ctx.get(), *AST->BinaryOpts, *AST->HSOpts, *AST->PPOpts,
+      *AST->LangOpts, AST->TargetOpts, AST->Target, Counter));
 
   // Attach the AST reader to the AST context as an external AST
   // source, so that declarations will be deserialized from the

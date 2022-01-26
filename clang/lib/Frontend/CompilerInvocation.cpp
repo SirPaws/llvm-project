@@ -39,6 +39,7 @@
 #include "clang/Frontend/PreprocessorOutputOptions.h"
 #include "clang/Frontend/TextDiagnosticBuffer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/BinarySearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -3152,7 +3153,8 @@ static void GenerateHeaderSearchArgs(const HeaderSearchOptions &Opts,
     GenerateArg(Consumer, OPT_ivfsoverlay, F);
 }
 
-static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
+static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts,
+                                  BinarySearchOptions &BOpts, ArgList &Args,
                                   DiagnosticsEngine &Diags,
                                   const std::string &WorkingDir) {
   unsigned NumErrorsBefore = Diags.getNumErrors();
@@ -3163,6 +3165,11 @@ static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
   PARSE_OPTION_WITH_MARSHALLING(Args, Diags, __VA_ARGS__)
 #include "clang/Driver/Options.inc"
 #undef HEADER_SEARCH_OPTION_WITH_MARSHALLING
+
+  for (const auto *A : Args.filtered(OPT_binary_dir, OPT_binary_dir_EQ)) {
+    std::string Path = A->getValue();
+    BOpts.UserEntries.push_back(Path);
+  }
 
   if (const Arg *A = Args.getLastArg(OPT_stdlib_EQ))
     Opts.UseLibcxx = (strcmp(A->getValue(), "libc++") == 0);

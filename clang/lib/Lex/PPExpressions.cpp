@@ -910,7 +910,7 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
   // If we are at the end of the expression after just parsing a value, there
   // must be no (unparenthesized) binary operators involved, so we can exit
   // directly.
-  if (Tok.is(tok::eod)) {
+  if (Tok.is(tok::eod) || (Parenthesized && Tok.is(tok::r_paren))) {
     // If the expression we parsed was of the form !defined(macro), return the
     // macro in IfNDefMacro.
     if (DT.State == DefinedTracker::NotDefinedMacro)
@@ -926,8 +926,8 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
 
   // Otherwise, we must have a binary operator (e.g. "#if 1 < 2"), so parse the
   // operator and the stuff after it.
-  if (EvaluateDirectiveSubExpr(ResVal, getPrecedence(tok::question),
-                               Tok, true, DT.IncludedUndefinedIds, *this)) {
+  if (EvaluateDirectiveSubExpr(ResVal, getPrecedence(tok::question), Tok, true,
+                               DT.IncludedUndefinedIds, *this)) {
     // Parse error, skip the rest of the macro line.
     if (Tok.isNot(tok::eod))
       DiscardUntilEndOfDirective(Tok);
