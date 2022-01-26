@@ -204,6 +204,15 @@ bool ChainedASTReaderListener::ReadHeaderSearchOptions(
                                          Complain);
 }
 
+bool ChainedASTReaderListener::ReadBinarySearchOptions(
+    const BinarySearchOptions &BOpts, StringRef SpecificModuleCachePath,
+    bool Complain) {
+  return First->ReadBinarySearchOptions(BOpts, SpecificModuleCachePath,
+                                        Complain) ||
+         Second->ReadBinarySearchOptions(BOpts, SpecificModuleCachePath,
+                                         Complain);
+}
+
 bool ChainedASTReaderListener::ReadPreprocessorOptions(
     const PreprocessorOptions &PPOpts, bool Complain,
     std::string &SuggestedPredefines) {
@@ -2569,6 +2578,14 @@ ASTReader::ASTReadResult ASTReader::ReadOptionsBlock(
       bool Complain = (ClientLoadCapabilities & ARR_ConfigurationMismatch) == 0;
       if (!AllowCompatibleConfigurationMismatch &&
           ParseHeaderSearchOptions(Record, Complain, Listener))
+        Result = ConfigurationMismatch;
+      break;
+    }
+
+    case BINARY_SEARCH_OPTIONS: {
+      bool Complain = (ClientLoadCapabilities & ARR_ConfigurationMismatch) == 0;
+      if (!AllowCompatibleConfigurationMismatch &&
+          ParseBinarySearchOptions(Record, Complain, Listener))
         Result = ConfigurationMismatch;
       break;
     }
@@ -5850,6 +5867,21 @@ bool ASTReader::ParseHeaderSearchOptions(const RecordData &Record,
                                           Complain);
 }
 
+bool ASTReader::ParseBinarySearchOptions(const RecordData &Record,
+                                         bool Complain,
+                                         ASTReaderListener &Listener) {
+  BinarySearchOptions BOpts;
+  unsigned Idx = 0;
+
+  // Include entries.
+  for (unsigned N = Record[Idx++]; N; --N) {
+    std::string Path = ReadString(Record, Idx);
+    BOpts.UserEntries.push_back(std::move(Path));
+  }
+
+  return Listener.ReadBinarySearchOptions(BOpts, "", Complain);
+}
+
 bool ASTReader::ParsePreprocessorOptions(const RecordData &Record,
                                          bool Complain,
                                          ASTReaderListener &Listener,
@@ -6027,6 +6059,20 @@ PreprocessedEntity *ASTReader::ReadPreprocessedEntity(unsigned Index) {
                                        Record[1], Record[3],
                                        File,
                                        Range);
+    return ID;
+  }
+
+  case PPD_EMBED_DIRECTIVE: {
+    const char *FullFileNameStart = Blob.data() + Record[0];
+    StringRef FullFileName(FullFileNameStart, Blob.size() - Record[0]);
+    const FileEntry *File = nullptr;
+    if (!FullFileName.empty())
+      if (auto FE = PP.getFileManager().getFile(FullFileName))
+        File = *FE;
+
+    EmbedDirective *ID = new (PPRec)
+        EmbedDirective(PPRec, StringRef(Blob.data(), Record[0]),
+                           Record[1], File, Range);
     return ID;
   }
   }

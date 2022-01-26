@@ -117,6 +117,7 @@ private:
   IntrusiveRefCntPtr<ASTContext>          Ctx;
   std::shared_ptr<TargetOptions>          TargetOpts;
   std::shared_ptr<HeaderSearchOptions>    HSOpts;
+  std::shared_ptr<BinarySearchOptions>    BinaryOpts;
   std::shared_ptr<PreprocessorOptions>    PPOpts;
   IntrusiveRefCntPtr<ASTReader> Reader;
   bool HadModuleLoaderFatalFailure = false;
@@ -461,6 +462,11 @@ public:
   const LangOptions &getLangOpts() const {
     assert(LangOpts && "ASTUnit does not have language options");
     return *LangOpts;
+  }
+
+  const BinarySearchOptions &getBinarySearchOpts() const {
+    assert(BinaryOpts && "ASTUnit does not have header search options");
+    return *BinaryOpts;
   }
 
   const HeaderSearchOptions &getHeaderSearchOpts() const {

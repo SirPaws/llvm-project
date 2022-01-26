@@ -851,7 +851,9 @@ static bool EvaluateDirectiveSubExpr(PPValue &LHS, unsigned MinPrec,
 /// may occur after a #if or #elif directive.  If the expression is equivalent
 /// to "!defined(X)" return X in IfNDefMacro.
 Preprocessor::DirectiveEvalResult
-Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro) {
+Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                          Token &Tok, bool CheckForEoD,
+                                          bool Parenthesized) {
   SaveAndRestore<bool> PPDir(ParsingIfOrElifDirective, true);
   // Save the current state of 'DisableMacroExpansion' and reset it to false. If
   // 'DisableMacroExpansion' is true, then we must be in a macro argument list
@@ -863,7 +865,6 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro) {
   DisableMacroExpansion = false;
 
   // Peek ahead one token.
-  Token Tok;
   LexNonComment(Tok);
 
   // C99 6.10.1p3 - All expressions are evaluated as intmax_t or uintmax_t.
@@ -884,7 +885,8 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro) {
     // We cannot trust the source range from the value because there was a
     // parse error. Track the range manually -- the end of the directive is the
     // end of the condition range.
-    return {false,
+    return {None,
+            false,
             DT.IncludedUndefinedIds,
             {ExprStartLoc, ConditionRange.getEnd()}};
   }
@@ -892,7 +894,7 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro) {
   // If we are at the end of the expression after just parsing a value, there
   // must be no (unparenthesized) binary operators involved, so we can exit
   // directly.
-  if (Tok.is(tok::eod)) {
+  if (Tok.is(tok::eod) || (Parenthesized && Tok.is(tok::r_paren))) {
     // If the expression we parsed was of the form !defined(macro), return the
     // macro in IfNDefMacro.
     if (DT.State == DefinedTracker::NotDefinedMacro)
@@ -900,30 +902,46 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro) {
 
     // Restore 'DisableMacroExpansion'.
     DisableMacroExpansion = DisableMacroExpansionAtStartOfDirective;
-    return {ResVal.Val != 0, DT.IncludedUndefinedIds, ResVal.getRange()};
+    return {ResVal.Val, ResVal.Val != 0, DT.IncludedUndefinedIds,
+            ResVal.getRange()};
   }
 
   // Otherwise, we must have a binary operator (e.g. "#if 1 < 2"), so parse the
   // operator and the stuff after it.
-  if (EvaluateDirectiveSubExpr(ResVal, getPrecedence(tok::question),
-                               Tok, true, DT.IncludedUndefinedIds, *this)) {
+  if (EvaluateDirectiveSubExpr(ResVal, getPrecedence(tok::question), Tok, true,
+                               DT.IncludedUndefinedIds, *this)) {
     // Parse error, skip the rest of the macro line.
     if (Tok.isNot(tok::eod))
       DiscardUntilEndOfDirective();
 
     // Restore 'DisableMacroExpansion'.
     DisableMacroExpansion = DisableMacroExpansionAtStartOfDirective;
-    return {false, DT.IncludedUndefinedIds, ResVal.getRange()};
+    return {None, false, DT.IncludedUndefinedIds, ResVal.getRange()};
   }
 
-  // If we aren't at the tok::eod token, something bad happened, like an extra
-  // ')' token.
-  if (Tok.isNot(tok::eod)) {
-    Diag(Tok, diag::err_pp_expected_eol);
-    DiscardUntilEndOfDirective();
+  if (CheckForEoD) {
+    // If we aren't at the tok::eod token, something bad happened, like an extra
+    // ')' token.
+    if (Tok.isNot(tok::eod)) {
+      Diag(Tok, diag::err_pp_expected_eol);
+      DiscardUntilEndOfDirective();
+    }
   }
 
   // Restore 'DisableMacroExpansion'.
   DisableMacroExpansion = DisableMacroExpansionAtStartOfDirective;
-  return {ResVal.Val != 0, DT.IncludedUndefinedIds, ResVal.getRange()};
+  return {ResVal.Val, ResVal.Val != 0, DT.IncludedUndefinedIds,
+          ResVal.getRange()};
+}
+
+/// EvaluateDirectiveExpression - Evaluate an integer constant expression that
+/// may occur after a #if or #elif directive.  If the expression is equivalent
+/// to "!defined(X)" return X in IfNDefMacro.
+Preprocessor::DirectiveEvalResult
+Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                          bool CheckForEoD,
+                                          bool Parenthesized) {
+  // Peek ahead one token.
+  Token Tok;
+  return EvaluateDirectiveExpression(IfNDefMacro, Tok, CheckForEoD, Parenthesized);
 }

@@ -385,6 +385,9 @@ enum OptionsRecordTypes {
   /// Record code for the headers search options table.
   HEADER_SEARCH_OPTIONS,
 
+  /// Record code for the headers search options table.
+  BINARY_SEARCH_OPTIONS,
+
   /// Record code for the preprocessor options table.
   PREPROCESSOR_OPTIONS,
 };
@@ -758,7 +761,11 @@ enum PreprocessorDetailRecordTypes {
 
   /// Describes an inclusion directive within the preprocessing
   /// record.
-  PPD_INCLUSION_DIRECTIVE = 2
+  PPD_INCLUSION_DIRECTIVE = 2,
+
+  /// Describes an inclusion directive within the preprocessing
+  /// record.
+  PPD_EMBED_DIRECTIVE = 3
 };
 
 /// Record types used within a submodule description block.

@@ -685,6 +685,14 @@ paths, for example if also specified with -isystem, the -I option
 will be ignored}]>;
 def L : JoinedOrSeparate<["-"], "L">, Flags<[RenderJoined]>, Group<Link_Group>,
     MetaVarName<"<dir>">, HelpText<"Add directory to library search path">;
+def binary_dir : JoinedOrSeparate<["-"], "binary-dir">,
+    Flags<[CoreOption,CC1Option,CC1AsOption,RenderJoined]>,
+    Group<I_Group>,
+    MetaVarName<"<dir>">, HelpText<"Add directory to binary resource search path">;
+def binary_dir_EQ : JoinedOrSeparate<["-"], "binary-dir=">,
+    Flags<[CoreOption,CC1Option,CC1AsOption,RenderJoined]>,
+    Group<I_Group>,
+    MetaVarName<"<dir>">, HelpText<"Add directory to binary resource search path">;
 def MD : Flag<["-"], "MD">, Group<M_Group>,
     HelpText<"Write a depfile containing user and system headers">;
 def MMD : Flag<["-"], "MMD">, Group<M_Group>,

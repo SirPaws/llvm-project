@@ -15,6 +15,7 @@
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/PCHContainerOperations.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/BinarySearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/ModuleLoader.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -294,6 +295,16 @@ public:
   }
   std::shared_ptr<HeaderSearchOptions> getHeaderSearchOptsPtr() const {
     return Invocation->getHeaderSearchOptsPtr();
+  }
+
+  BinarySearchOptions &getBinarySearchOpts() {
+    return Invocation->getBinarySearchOpts();
+  }
+  const BinarySearchOptions &getBinarySearchOpts() const {
+    return Invocation->getBinarySearchOpts();
+  }
+  std::shared_ptr<BinarySearchOptions> getBinarySearchOptsPtr() const {
+    return Invocation->getBinarySearchOptsPtr();
   }
 
   LangOptions &getLangOpts() {

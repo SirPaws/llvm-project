@@ -48,6 +48,7 @@ namespace clang {
 class ASTContext;
 class ASTReader;
 class Attr;
+class BinarySearchOptions;
 class CXXRecordDecl;
 class FileEntry;
 class FPOptionsOverride;
@@ -461,7 +462,7 @@ private:
   static std::pair<ASTFileSignature, ASTFileSignature>
   createSignature(StringRef AllBytes, StringRef ASTBlockBytes);
 
-  void WriteInputFiles(SourceManager &SourceMgr, HeaderSearchOptions &HSOpts,
+  void WriteInputFiles(SourceManager &SourceMgr, HeaderSearchOptions &HSOpts, BinarySearchOptions &BOpts,
                        std::set<const FileEntry *> &AffectingModuleMaps);
   void WriteSourceManagerBlock(SourceManager &SourceMgr,
                                const Preprocessor &PP);

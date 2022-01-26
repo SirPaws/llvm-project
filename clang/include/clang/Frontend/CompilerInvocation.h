@@ -47,6 +47,7 @@ namespace clang {
 
 class DiagnosticsEngine;
 class HeaderSearchOptions;
+class BinarySearchOptions;
 class PreprocessorOptions;
 class TargetOptions;
 
@@ -88,6 +89,9 @@ public:
   /// Options controlling the \#include directive.
   std::shared_ptr<HeaderSearchOptions> HeaderSearchOpts;
 
+  /// Options controlling the \#include directive.
+  std::shared_ptr<BinarySearchOptions> BinarySearchOpts;
+
   /// Options controlling the preprocessor (aside from \#include handling).
   std::shared_ptr<PreprocessorOptions> PreprocessorOpts;
 
@@ -117,6 +121,16 @@ public:
 
   std::shared_ptr<HeaderSearchOptions> getHeaderSearchOptsPtr() const {
     return HeaderSearchOpts;
+  }
+
+  BinarySearchOptions &getBinarySearchOpts() { return *BinarySearchOpts; }
+
+  const BinarySearchOptions &getBinarySearchOpts() const {
+    return *BinarySearchOpts;
+  }
+
+  std::shared_ptr<BinarySearchOptions> getBinarySearchOptsPtr() const {
+    return BinarySearchOpts;
   }
 
   std::shared_ptr<PreprocessorOptions> getPreprocessorOptsPtr() {

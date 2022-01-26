@@ -40,6 +40,7 @@
 #include "clang/Frontend/PreprocessorOutputOptions.h"
 #include "clang/Frontend/TextDiagnosticBuffer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/BinarySearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -114,6 +115,7 @@ CompilerInvocationRefBase::CompilerInvocationRefBase()
     : LangOpts(new LangOptions()), TargetOpts(new TargetOptions()),
       DiagnosticOpts(new DiagnosticOptions()),
       HeaderSearchOpts(new HeaderSearchOptions()),
+      BinarySearchOpts(new BinarySearchOptions()),
       PreprocessorOpts(new PreprocessorOptions()),
       AnalyzerOpts(new AnalyzerOptions()) {}
 
@@ -123,6 +125,7 @@ CompilerInvocationRefBase::CompilerInvocationRefBase(
       TargetOpts(new TargetOptions(X.getTargetOpts())),
       DiagnosticOpts(new DiagnosticOptions(X.getDiagnosticOpts())),
       HeaderSearchOpts(new HeaderSearchOptions(X.getHeaderSearchOpts())),
+      BinarySearchOpts(new BinarySearchOptions(X.getBinarySearchOpts())),
       PreprocessorOpts(new PreprocessorOptions(X.getPreprocessorOpts())),
       AnalyzerOpts(new AnalyzerOptions(*X.getAnalyzerOpts())) {}
 
@@ -134,6 +137,7 @@ CompilerInvocationRefBase::operator=(CompilerInvocationRefBase X) {
   LangOpts.swap(X.LangOpts);
   TargetOpts.swap(X.TargetOpts);
   DiagnosticOpts.swap(X.DiagnosticOpts);
+  BinarySearchOpts.swap(X.BinarySearchOpts);
   HeaderSearchOpts.swap(X.HeaderSearchOpts);
   PreprocessorOpts.swap(X.PreprocessorOpts);
   AnalyzerOpts.swap(X.AnalyzerOpts);
@@ -2838,7 +2842,7 @@ std::string CompilerInvocation::GetResourcesPath(const char *Argv0,
   return Driver::GetResourcesPath(ClangExecutable, CLANG_RESOURCE_DIR);
 }
 
-static void GenerateHeaderSearchArgs(HeaderSearchOptions &Opts,
+static void GenerateHeaderSearchArgs(HeaderSearchOptions &Opts, BinarySearchOptions& BOpts,
                                      SmallVectorImpl<const char *> &Args,
                                      CompilerInvocation::StringAllocator SA) {
   const HeaderSearchOptions *HeaderSearchOpts = &Opts;
@@ -2962,9 +2966,13 @@ static void GenerateHeaderSearchArgs(HeaderSearchOptions &Opts,
 
   for (const std::string &F : Opts.VFSOverlayFiles)
     GenerateArg(Args, OPT_ivfsoverlay, F, SA);
+
+  for (const std::string &E : BOpts.UserEntries)
+    GenerateArg(Args, OPT_binary_dir, E, SA);
 }
 
-static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
+static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts,
+                                  BinarySearchOptions &BOpts, ArgList &Args,
                                   DiagnosticsEngine &Diags,
                                   const std::string &WorkingDir) {
   unsigned NumErrorsBefore = Diags.getNumErrors();
@@ -2981,6 +2989,11 @@ static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
       IMPLIED_CHECK, IMPLIED_VALUE, NORMALIZER, MERGER, TABLE_INDEX)
 #include "clang/Driver/Options.inc"
 #undef HEADER_SEARCH_OPTION_WITH_MARSHALLING
+
+  for (const auto *A : Args.filtered(OPT_binary_dir, OPT_binary_dir_EQ)) {
+    std::string Path = A->getValue();
+    BOpts.UserEntries.push_back(Path);
+  }
 
   if (const Arg *A = Args.getLastArg(OPT_stdlib_EQ))
     Opts.UseLibcxx = (strcmp(A->getValue(), "libc++") == 0);
@@ -4465,8 +4478,8 @@ bool CompilerInvocation::CreateFromArgsImpl(
   InputKind DashX = Res.getFrontendOpts().DashX;
   ParseTargetArgs(Res.getTargetOpts(), Args, Diags);
   llvm::Triple T(Res.getTargetOpts().Triple);
-  ParseHeaderSearchArgs(Res.getHeaderSearchOpts(), Args, Diags,
-                        Res.getFileSystemOpts().WorkingDir);
+  ParseHeaderSearchArgs(Res.getHeaderSearchOpts(), Res.getBinarySearchOpts(),
+                        Args, Diags, Res.getFileSystemOpts().WorkingDir);
 
   ParseLangArgs(LangOpts, Args, DashX, T, Res.getPreprocessorOpts().Includes,
                 Diags);
@@ -4647,7 +4660,7 @@ void CompilerInvocation::generateCC1CommandLine(
   GenerateDiagnosticArgs(*DiagnosticOpts, Args, SA, false);
   GenerateFrontendArgs(FrontendOpts, Args, SA, LangOpts->IsHeaderFile);
   GenerateTargetArgs(*TargetOpts, Args, SA);
-  GenerateHeaderSearchArgs(*HeaderSearchOpts, Args, SA);
+  GenerateHeaderSearchArgs(*HeaderSearchOpts, *BinarySearchOpts, Args, SA);
   GenerateLangArgs(*LangOpts, Args, SA, T, FrontendOpts.DashX);
   GenerateCodeGenArgs(CodeGenOpts, Args, SA, T, FrontendOpts.OutputFile,
                       &*LangOpts);

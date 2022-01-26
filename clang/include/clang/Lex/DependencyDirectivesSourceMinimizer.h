@@ -33,6 +33,7 @@ namespace minimize_source_to_dependency_directives {
 enum TokenKind {
   pp_none,
   pp_include,
+  pp_embed,
   pp___include_macros,
   pp_define,
   pp_undef,

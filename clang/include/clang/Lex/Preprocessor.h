@@ -64,6 +64,7 @@ template<unsigned InternalLen> class SmallString;
 
 namespace clang {
 
+class BinarySearchOptions;
 class CodeCompletionHandler;
 class CommentHandler;
 class DirectoryEntry;
@@ -134,7 +135,8 @@ class Preprocessor {
   llvm::unique_function<void(const clang::Token &)> OnToken;
   std::shared_ptr<PreprocessorOptions> PPOpts;
   DiagnosticsEngine        *Diags;
-  LangOptions       &LangOpts;
+  LangOptions &LangOpts;
+  BinarySearchOptions &BinarySearchOpts;
   const TargetInfo *Target = nullptr;
   const TargetInfo *AuxTarget = nullptr;
   FileManager       &FileMgr;
@@ -166,6 +168,7 @@ class Preprocessor {
   IdentifierInfo *Ident__has_extension;            // __has_extension
   IdentifierInfo *Ident__has_builtin;              // __has_builtin
   IdentifierInfo *Ident__has_attribute;            // __has_attribute
+  IdentifierInfo *Ident__has_embed;                // __has_embed
   IdentifierInfo *Ident__has_include;              // __has_include
   IdentifierInfo *Ident__has_include_next;         // __has_include_next
   IdentifierInfo *Ident__has_warning;              // __has_warning
@@ -922,7 +925,8 @@ private:
 
 public:
   Preprocessor(std::shared_ptr<PreprocessorOptions> PPOpts,
-               DiagnosticsEngine &diags, LangOptions &opts, SourceManager &SM,
+               DiagnosticsEngine &diags, LangOptions &opts,
+               BinarySearchOptions &BOpts, SourceManager &SM,
                HeaderSearch &Headers, ModuleLoader &TheModuleLoader,
                IdentifierInfoLookup *IILookup = nullptr,
                bool OwnsHeaderSearch = false,
@@ -958,6 +962,7 @@ public:
   void setDiagnostics(DiagnosticsEngine &D) { Diags = &D; }
 
   const LangOptions &getLangOpts() const { return LangOpts; }
+  BinarySearchOptions &getBinarySearchOpts() const { return BinarySearchOpts; }
   const TargetInfo &getTargetInfo() const { return *Target; }
   const TargetInfo *getAuxTargetInfo() const { return AuxTarget; }
   FileManager &getFileManager() const { return FileMgr; }
@@ -1448,6 +1453,19 @@ public:
 
   /// Lex a token, forming a header-name token if possible.
   bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
+
+  struct LexEmbedParametersResult {
+    bool Successful;
+    Optional<size_t> MaybeLimitParam;
+    Optional<SmallVector<Token, 2>> MaybeEmptyParam;
+    Optional<SmallVector<Token, 2>> MaybePrefixParam;
+    Optional<SmallVector<Token, 2>> MaybeSuffixParam;
+    int UnrecognizedParams;
+  };
+
+  LexEmbedParametersResult LexEmbedParameters(Token &Current,
+                                              bool InHasEmbed = false, 
+                                              bool DiagnoseUnknown = true);
 
   bool LexAfterModuleImport(Token &Result);
   void CollectPpImportSuffix(SmallVectorImpl<Token> &Toks);
@@ -2056,6 +2074,13 @@ public:
              ModuleMap::KnownHeader *SuggestedModule, bool *IsMapped,
              bool *IsFrameworkFound, bool SkipCache = false);
 
+  std::unique_ptr<llvm::MemoryBuffer>
+  LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename,
+                  Optional<size_t> MaybeLimit, bool isAngled,
+                  SmallVectorImpl<char> *SearchPath,
+                  SmallVectorImpl<char> *RelativePath,
+                  const FileEntry *LookupFromFile);
+
   /// Get the DirectoryLookup structure used to find the current
   /// FileEntry, if CurLexer is non-null and if applicable.
   ///
@@ -2160,6 +2185,9 @@ private:
   /// Information about the result for evaluating an expression for a
   /// preprocessor directive.
   struct DirectiveEvalResult {
+    /// The integral value of the expression.
+    Optional<llvm::APSInt> Value;
+
     /// Whether the expression was evaluated as true or not.
     bool Conditional;
 
@@ -2174,7 +2202,18 @@ private:
   /// \#if or \#elif directive and return a \p DirectiveEvalResult object.
   ///
   /// If the expression is equivalent to "!defined(X)" return X in IfNDefMacro.
-  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro);
+  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                                  bool CheckForEoD = true,
+                                                  bool Parenthesized = false);
+
+  /// Evaluate an integer constant expression that may occur after a
+  /// \#if or \#elif directive and return a \p DirectiveEvalResult object.
+  ///
+  /// If the expression is equivalent to "!defined(X)" return X in IfNDefMacro.
+  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                                  Token &Tok,
+                                                  bool CheckForEoD = true,
+                                                  bool Parenthesized = false);
 
   /// Install the standard preprocessor pragmas:
   /// \#pragma GCC poison/system_header/dependency and \#pragma once.
@@ -2312,6 +2351,8 @@ private:
   void HandleIncludeDirective(SourceLocation HashLoc, Token &Tok,
                               const DirectoryLookup *LookupFrom = nullptr,
                               const FileEntry *LookupFromFile = nullptr);
+  void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok,
+                            const FileEntry *LookupFromFile = nullptr);
   ImportAction
   HandleHeaderIncludeOrImport(SourceLocation HashLoc, Token &IncludeTok,
                               Token &FilenameTok, SourceLocation EndLoc,

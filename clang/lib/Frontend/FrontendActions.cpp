@@ -638,6 +638,17 @@ namespace {
       return false;
     }
 
+    bool ReadBinarySearchOptions(const BinarySearchOptions &BOpts,
+                                 StringRef SpecificModuleCachePath,
+                                 bool Complain) override {
+      Out.indent(2) << "Binary search options:\n";
+      Out.indent(4) << "Binary dirs [ -binary-dir=]:\n";
+      for (const auto &Entry : BOpts.UserEntries) {
+        Out.indent(6) << Entry << "'\n";
+      }
+      return false;
+    }
+
     bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,
                                  bool Complain,
                                  std::string &SuggestedPredefines) override {

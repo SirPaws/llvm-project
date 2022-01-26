@@ -270,11 +270,14 @@ public:
   /// MemoryBuffer if successful, otherwise returning null.
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>>
   getBufferForFile(const FileEntry *Entry, bool isVolatile = false,
-                   bool RequiresNullTerminator = true);
+                   bool RequiresNullTerminator = true,
+                   Optional<size_t> MaybeLimit = None);
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>>
   getBufferForFile(StringRef Filename, bool isVolatile = false,
-                   bool RequiresNullTerminator = true) {
-    return getBufferForFileImpl(Filename, /*FileSize=*/-1, isVolatile,
+                   bool RequiresNullTerminator = true,
+                   Optional<size_t> MaybeLimit = None) {
+    return getBufferForFileImpl(Filename, MaybeLimit ? *MaybeLimit : -1,
+                                isVolatile,
                                 RequiresNullTerminator);
   }
 

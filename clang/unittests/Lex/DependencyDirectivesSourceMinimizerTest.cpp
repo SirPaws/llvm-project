@@ -57,6 +57,7 @@ TEST(MinimizeSourceToDependencyDirectivesTest, AllTokens) {
                                            "#elifndef A\n"
                                            "#elif A\n"
                                            "#else\n"
+                                           "#embed <A>;\n",
                                            "#include <A>\n"
                                            "#include_next <A>\n"
                                            "#__include_macros <A>\n"
@@ -79,19 +80,20 @@ TEST(MinimizeSourceToDependencyDirectivesTest, AllTokens) {
   EXPECT_EQ(pp_elifndef, Tokens[7].K);
   EXPECT_EQ(pp_elif, Tokens[8].K);
   EXPECT_EQ(pp_else, Tokens[9].K);
-  EXPECT_EQ(pp_include, Tokens[10].K);
-  EXPECT_EQ(pp_include_next, Tokens[11].K);
-  EXPECT_EQ(pp___include_macros, Tokens[12].K);
-  EXPECT_EQ(pp_import, Tokens[13].K);
-  EXPECT_EQ(decl_at_import, Tokens[14].K);
-  EXPECT_EQ(pp_pragma_import, Tokens[15].K);
-  EXPECT_EQ(pp_pragma_push_macro, Tokens[16].K);
-  EXPECT_EQ(pp_pragma_pop_macro, Tokens[17].K);
-  EXPECT_EQ(pp_pragma_include_alias, Tokens[18].K);
-  EXPECT_EQ(cxx_export_decl, Tokens[19].K);
-  EXPECT_EQ(cxx_module_decl, Tokens[20].K);
-  EXPECT_EQ(cxx_import_decl, Tokens[21].K);
-  EXPECT_EQ(pp_eof, Tokens[22].K);
+  EXPECT_EQ(pp_embed, Tokens[10].K);
+  EXPECT_EQ(pp_include, Tokens[11].K);
+  EXPECT_EQ(pp_include_next, Tokens[12].K);
+  EXPECT_EQ(pp___include_macros, Tokens[13].K);
+  EXPECT_EQ(pp_import, Tokens[14].K);
+  EXPECT_EQ(decl_at_import, Tokens[15].K);
+  EXPECT_EQ(pp_pragma_import, Tokens[16].K);
+  EXPECT_EQ(pp_pragma_push_macro, Tokens[17].K);
+  EXPECT_EQ(pp_pragma_pop_macro, Tokens[18].K);
+  EXPECT_EQ(pp_pragma_include_alias, Tokens[19].K);
+  EXPECT_EQ(cxx_export_decl, Tokens[20].K);
+  EXPECT_EQ(cxx_module_decl, Tokens[21].K);
+  EXPECT_EQ(cxx_import_decl, Tokens[22].K);
+  EXPECT_EQ(pp_eof, Tokens[23].K);
 }
 
 TEST(MinimizeSourceToDependencyDirectivesTest, Define) {

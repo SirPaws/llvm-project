@@ -77,6 +77,9 @@ class Token;
       /// \#import, or \c \#include_next.
       InclusionDirectiveKind,
 
+      /// An inclusion directive, such as \c \#embed.
+      EmbedDirectiveKind,
+
       /// @}
 
       FirstPreprocessingDirective = MacroDefinitionKind,
@@ -271,6 +274,41 @@ class Token;
     // Implement isa/cast/dyncast/etc.
     static bool classof(const PreprocessedEntity *PE) {
       return PE->getKind() == InclusionDirectiveKind;
+    }
+  };
+
+  /// Record the location of an \c \#embed statement.
+  class EmbedDirective : public PreprocessingDirective {
+  private:
+    /// The name of the file that was included, as written in
+    /// the source.
+    StringRef FileName;
+
+    /// Whether the file name was in quotation marks; otherwise, it was
+    /// in angle brackets.
+    unsigned InQuotes : 1;
+
+    /// The file that was included.
+    const FileEntry *File;
+
+  public:
+    EmbedDirective(PreprocessingRecord &PPRec, StringRef FileName,
+                   bool InQuotes, const FileEntry *File, SourceRange Range);
+
+    /// Retrieve the included file name as it was written in the source.
+    StringRef getFileName() const { return FileName; }
+
+    /// Determine whether the included file name was written in quotes;
+    /// otherwise, it was written in angle brackets.
+    bool wasInQuotes() const { return InQuotes; }
+
+    /// Retrieve the file entry for the actual file that was included
+    /// by this directive.
+    const FileEntry *getFile() const { return File; }
+
+    // Implement isa/cast/dyncast/etc.
+    static bool classof(const PreprocessedEntity *PE) {
+      return PE->getKind() == EmbedDirectiveKind;
     }
   };
 
@@ -534,6 +572,11 @@ class Token;
                             const FileEntry *File, StringRef SearchPath,
                             StringRef RelativePath, const Module *Imported,
                             SrcMgr::CharacteristicKind FileType) override;
+    void EmbedDirective(SourceLocation HashLoc, const Token &IncludeTok,
+                            StringRef FileName, bool IsAngled,
+                            CharSourceRange FilenameRange,
+                            const FileEntry *File, StringRef SearchPath,
+                            StringRef RelativePath) override;
     void Ifdef(SourceLocation Loc, const Token &MacroNameTok,
                const MacroDefinition &MD) override;
     void Ifndef(SourceLocation Loc, const Token &MacroNameTok,

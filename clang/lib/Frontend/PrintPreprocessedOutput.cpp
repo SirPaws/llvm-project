@@ -93,6 +93,7 @@ private:
   bool DisableLineMarkers;
   bool DumpDefines;
   bool DumpIncludeDirectives;
+  bool DumpEmbedDirectives;
   bool UseLineDirectives;
   bool IsFirstFileEntered;
   bool MinimizeWhitespace;
@@ -103,10 +104,12 @@ private:
 public:
   PrintPPOutputPPCallbacks(Preprocessor &pp, raw_ostream &os, bool lineMarkers,
                            bool defines, bool DumpIncludeDirectives,
-                           bool UseLineDirectives, bool MinimizeWhitespace)
+                           bool DumpEmbedDirectives, bool UseLineDirectives,
+                           bool MinimizeWhitespace)
       : PP(pp), SM(PP.getSourceManager()), ConcatInfo(PP), OS(os),
         DisableLineMarkers(lineMarkers), DumpDefines(defines),
         DumpIncludeDirectives(DumpIncludeDirectives),
+        DumpEmbedDirectives(DumpEmbedDirectives),
         UseLineDirectives(UseLineDirectives),
         MinimizeWhitespace(MinimizeWhitespace) {
     CurLine = 0;
@@ -147,6 +150,10 @@ public:
                           StringRef SearchPath, StringRef RelativePath,
                           const Module *Imported,
                           SrcMgr::CharacteristicKind FileType) override;
+  void EmbedDirective(SourceLocation HashLoc, const Token &IncludeTok,
+                          StringRef FileName, bool IsAngled,
+                          CharSourceRange FilenameRange, const FileEntry *File,
+                          StringRef SearchPath, StringRef RelativePath) override;
   void Ident(SourceLocation Loc, StringRef str) override;
   void PragmaMessage(SourceLocation Loc, StringRef Namespace,
                      PragmaMessageKind Kind, StringRef Str) override;
@@ -436,6 +443,22 @@ void PrintPPOutputPPCallbacks::InclusionDirective(
       break;
     }
   }
+}
+
+void PrintPPOutputPPCallbacks::EmbedDirective(
+    SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
+    bool IsAngled, CharSourceRange FilenameRange, const FileEntry *File,
+    StringRef SearchPath, StringRef RelativePath) {
+  // In -dI mode, dump #include directives prior to dumping their content or
+  // interpretation.
+  if (DumpIncludeDirectives) {
+    MoveToLine(HashLoc, /*RequireStartOfLine=*/true);
+    OS << "#embed"
+       << " " << (IsAngled ? '<' : '"') << FileName << (IsAngled ? '>' : '"')
+       << " /* clang -E -dI */";
+    setEmittedDirectiveOnThisLine();
+  }
+  // FIXME: dump integers here
 }
 
 /// Handle entering the scope of a module during a module compilation.
@@ -957,8 +980,8 @@ void clang::DoPrintPreprocessedInput(Preprocessor &PP, raw_ostream *OS,
 
   PrintPPOutputPPCallbacks *Callbacks = new PrintPPOutputPPCallbacks(
       PP, *OS, !Opts.ShowLineMarkers, Opts.ShowMacros,
-      Opts.ShowIncludeDirectives, Opts.UseLineDirectives,
-      Opts.MinimizeWhitespace);
+      Opts.ShowIncludeDirectives, Opts.ShowEmbedDirectives,
+      Opts.UseLineDirectives, Opts.MinimizeWhitespace);
 
   // Expand macros in pragmas with -fms-extensions.  The assumption is that
   // the majority of pragmas in such a file will be Microsoft pragmas.

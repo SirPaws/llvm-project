@@ -131,6 +131,18 @@ public:
                                   SrcMgr::CharacteristicKind FileType) {
   }
 
+  
+  virtual void EmbedDirective(SourceLocation HashLoc,
+                              const Token &IncludeTok, StringRef FileName,
+                              bool IsAngled, CharSourceRange FilenameRange,
+                              const FileEntry *File, StringRef SearchPath,
+                              StringRef RelativePath) {}
+
+  virtual bool EmbedFileNotFound(StringRef FileName,
+                            SmallVectorImpl<char> &RecoveryPath) {
+    return false;
+  }
+
   /// Callback invoked whenever a submodule was entered.
   ///
   /// \param M The submodule we have entered.
@@ -325,6 +337,10 @@ public:
                           Optional<FileEntryRef> File,
                           SrcMgr::CharacteristicKind FileType);
 
+  /// Hook called when a '__has_embed' directive is read.
+  virtual void HasEmbed(SourceLocation Loc, StringRef FileName, bool IsAngled,
+                        Optional<FileEntryRef> File) {}
+
   /// Hook called when a source range is skipped.
   /// \param Range The SourceRange that was skipped. The range begins at the
   /// \#if/\#else directive and ends after the \#endif/\#else directive.
@@ -461,6 +477,16 @@ public:
     Second->InclusionDirective(HashLoc, IncludeTok, FileName, IsAngled,
                                FilenameRange, File, SearchPath, RelativePath,
                                Imported, FileType);
+  }
+
+  void EmbedDirective(SourceLocation HashLoc, const Token &IncludeTok,
+                      StringRef FileName, bool IsAngled,
+                      CharSourceRange FilenameRange, const FileEntry *File,
+                      StringRef SearchPath, StringRef RelativePath) override {
+    First->EmbedDirective(HashLoc, IncludeTok, FileName, IsAngled,
+                          FilenameRange, File, SearchPath, RelativePath);
+    Second->EmbedDirective(HashLoc, IncludeTok, FileName, IsAngled,
+                           FilenameRange, File, SearchPath, RelativePath);
   }
 
   void EnteredSubmodule(Module *M, SourceLocation ImportLoc,

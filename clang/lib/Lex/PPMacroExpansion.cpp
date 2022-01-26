@@ -376,6 +376,7 @@ void Preprocessor::RegisterBuiltinMacros() {
     Ident__has_c_attribute = nullptr;
 
   Ident__has_declspec = RegisterBuiltinMacro(*this, "__has_declspec_attribute");
+  Ident__has_embed      = RegisterBuiltinMacro(*this, "__has_embed");
   Ident__has_include      = RegisterBuiltinMacro(*this, "__has_include");
   Ident__has_include_next = RegisterBuiltinMacro(*this, "__has_include_next");
   Ident__has_warning      = RegisterBuiltinMacro(*this, "__has_warning");
@@ -1245,6 +1246,56 @@ static bool EvaluateHasIncludeCommon(Token &Tok,
   return File.hasValue();
 }
 
+/// EvaluateHasEmbed - Process a '__has_embed("foo" params...)' expression.
+/// Returns true if successful.
+static bool EvaluateHasEmbed(Token &Tok, IdentifierInfo *II,
+                               Preprocessor &PP) {
+  // Discard initial left paren
+  PP.Lex(Tok);
+  if (Tok.isNot(tok::l_paren)) {
+    PP.Diag(Tok, diag::err_expected) << ")";
+    PP.DiscardUntilEndOfDirective();
+    return false;
+  }
+  Token FilenameTok;
+  // Parse the filename header
+  if (PP.LexHeaderName(FilenameTok))
+    return false;
+
+  if (FilenameTok.isNot(tok::header_name)) {
+    PP.Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
+    if (FilenameTok.isNot(tok::eod))
+      PP.DiscardUntilEndOfDirective();
+    return false;
+  }
+
+  Preprocessor::LexEmbedParametersResult Params = PP.LexEmbedParameters(Tok, true, false);
+  if (!Params.Successful || Params.UnrecognizedParams > 0) {
+    return false;
+  }
+
+  SmallString<128> FilenameBuffer;
+  SmallString<256> RelativePath;
+  StringRef Filename = PP.getSpelling(FilenameTok, FilenameBuffer);
+  SourceLocation FilenameLoc = FilenameTok.getLocation();
+  StringRef OriginalFilename = Filename;
+  bool isAngled =
+      PP.GetIncludeFilenameSpelling(FilenameTok.getLocation(), Filename);
+  // If GetIncludeFilenameSpelling set the start ptr to null, there was an
+  // error.
+  assert(!Filename.empty());
+  const FileEntry *LookupFromFile =
+      PP.getCurrentFileLexer() ? PP.getCurrentFileLexer()->getFileEntry()
+                               : nullptr;
+  std::unique_ptr<llvm::MemoryBuffer> MaybeFile =
+      PP.LookupEmbedFile(FilenameLoc, Filename, Params.MaybeLimitParam,
+                         isAngled, nullptr, &RelativePath, LookupFromFile);
+  if (MaybeFile == nullptr) {
+    return false;
+  }
+  return true;
+}
+
 /// EvaluateHasInclude - Process a '__has_include("path")' expression.
 /// Returns true if successful.
 static bool EvaluateHasInclude(Token &Tok, IdentifierInfo *II,
@@ -1741,6 +1792,12 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     else
       Value = EvaluateHasIncludeNext(Tok, II, *this);
 
+    if (Tok.isNot(tok::r_paren))
+      return;
+    OS << (int)Value;
+    Tok.setKind(tok::numeric_constant);
+  } else if (II == Ident__has_embed) {
+    bool Value = EvaluateHasEmbed(Tok, II, *this);
     if (Tok.isNot(tok::r_paren))
       return;
     OS << (int)Value;
