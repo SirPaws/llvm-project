@@ -1776,6 +1776,14 @@ Parser::ParseDeclaration(DeclaratorContext Context, SourceLocation &DeclEnd,
 Decl*
 Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd,
                          ParsedAttributesWithRange &attrs) {
+  const LangOptions &LangOpts = getLangOpts();
+  bool IsCOnly =
+      (LangOpts.C99 || LangOpts.C11 || LangOpts.C2x || LangOpts.C17) &&
+      !(LangOpts.CPlusPlus);
+  if (!IsCOnly) {
+    Diag(diag::err_type_unsupported) << "_Alias (C only)";
+    return nullptr;
+  }
   bool IsWeak = false;
   SourceLocation WeakLoc;
   if (Tok.is(tok::kw__Weak)) {
