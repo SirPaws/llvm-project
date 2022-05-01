@@ -946,20 +946,33 @@ Optional<FileEntryRef> Preprocessor::LookupFile(
   return None;
 }
 
-std::unique_ptr<llvm::MemoryBuffer>
-Preprocessor::LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename, Optional<size_t> MaybeLimit,
-                              bool isAngled, SmallVectorImpl<char> *SearchPath,
-                              SmallVectorImpl<char> *RelativePath,
-                              const FileEntry *LookupFromFile) {
+Optional<FileEntryRef> Preprocessor::LookupEmbedFile(
+    SourceLocation FilenameLoc, StringRef Filename, Optional<size_t> MaybeLimit,
+    bool isAngled, const SmallVectorImpl<char> *LocalPath,
+    SmallVectorImpl<char> *SearchPath,
+    SmallVectorImpl<char> *RelativePath, const FileEntry *LookupFromFile) {
   FileManager &FM = this->getFileManager();
+  auto DidErrorHappen = [](llvm::Expected<FileEntryRef> &Attempt) -> bool {
+    if (Attempt) {
+      return false;
+    }
+    llvm::handleAllErrors(Attempt.takeError(), [](llvm::ErrorInfoBase &) {
+      // simply purging the information
+    });
+    return true;
+  };
   if (llvm::sys::path::is_absolute(Filename)) {
     // lookup path or immediately fail
-    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ShouldBeBuffer =
-        FM.getBufferForFile(Filename, true, true, MaybeLimit);
-    if (!ShouldBeBuffer) {
-      return nullptr;
+    Expected<FileEntryRef> ImmediateLookupFile =
+        FM.getFileRef(Filename, false);
+    if (DidErrorHappen(ImmediateLookupFile)) {
+      return None;
     }
-    return std::move(*ShouldBeBuffer);
+    if (SearchPath) {
+      SearchPath->assign(Filename.begin(), Filename.end());
+      llvm::sys::path::remove_filename(*SearchPath);
+    }
+    return ImmediateLookupFile.get();
   }
 
   // Otherwise, it's search time!
@@ -967,9 +980,9 @@ Preprocessor::LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename, Op
   // Non-angled lookup
   if (!isAngled) {
     bool TryLocalLookup = false;
-    if (SearchPath) {
+    if (LocalPath) {
         // use the provided search path as the local lookup path
-        llvm::sys::path::native(*SearchPath, LookupPath);
+        llvm::sys::path::native(*LocalPath, LookupPath);
         TryLocalLookup = true;
     }
     else if (LookupFromFile) {
@@ -990,10 +1003,13 @@ Preprocessor::LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename, Op
         LookupPath.append(llvm::sys::path::get_separator());
       }
       LookupPath.append(Filename);
-      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ShouldBeBuffer =
-          FM.getBufferForFile(LookupPath, true, true, MaybeLimit);
-      if (ShouldBeBuffer) {
-        return std::move(*ShouldBeBuffer);
+      Expected<FileEntryRef> FileLookup = FM.getFileRef(LookupPath, false);
+      if (!DidErrorHappen(FileLookup)) {
+        if (SearchPath) {
+          *SearchPath = LookupPath;
+          llvm::sys::path::remove_filename(*SearchPath);
+        }
+        return FileLookup.get();
       }
     }
   }
@@ -1013,10 +1029,13 @@ Preprocessor::LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename, Op
         }
         LookupPath.append(llvm::sys::path::get_separator());
         LookupPath.append(Filename);
-        llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ShouldBeBuffer =
-            FM.getBufferForFile(LookupPath, true, true, MaybeLimit);
-        if (ShouldBeBuffer) {
-          return std::move(*ShouldBeBuffer);
+        Expected<FileEntryRef> FileLookup = FM.getFileRef(LookupPath, false);
+        if (!DidErrorHappen(FileLookup)) {
+          if (SearchPath) {
+            *SearchPath = LookupPath;
+            llvm::sys::path::remove_filename(*SearchPath);
+          }
+          return FileLookup.get();
         }
       }
     }
@@ -1031,13 +1050,40 @@ Preprocessor::LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename, Op
     }
     LookupPath.append(Filename.begin(), Filename.end());
     llvm::sys::path::native(LookupPath);
-    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ShouldBeBuffer =
-        FM.getBufferForFile(LookupPath, true, true, MaybeLimit);
-    if (ShouldBeBuffer) {
-      return std::move(*ShouldBeBuffer);
+    
+    Expected<FileEntryRef> FileLookup = FM.getFileRef(LookupPath, false);
+    if (!DidErrorHappen(FileLookup)) {
+      if (SearchPath) {
+        *SearchPath = LookupPath;
+        llvm::sys::path::remove_filename(*SearchPath);
+      }
+      return FileLookup.get();
     }
   }
-  return nullptr;
+
+  // Try to let the installed callbacks fix up the path, if possible
+  if (PPCallbacks *PPC = getPPCallbacks()) {
+    LookupPath.clear();
+    if (PPC->EmbedFileNotFound(Filename, LookupPath)) {
+      llvm::sys::path::native(LookupPath, LookupPath);
+      if (!LookupPath.empty() &&
+          !llvm::sys::path::is_separator(LookupPath.back())) {
+        LookupPath.append(llvm::sys::path::get_separator());
+      }
+      LookupPath.append(Filename.begin(), Filename.end());
+      llvm::sys::path::native(LookupPath);
+
+      Expected<FileEntryRef> FileLookup = FM.getFileRef(LookupPath, false);
+      if (!DidErrorHappen(FileLookup)) {
+        if (SearchPath) {
+          *SearchPath = LookupPath;
+          llvm::sys::path::remove_filename(*SearchPath);
+        }
+        return FileLookup.get();
+      }
+    }
+  }
+  return None;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2225,6 +2271,7 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
   // Now, splat the data out!
   SmallString<128> FilenameBuffer;
   SmallString<512> RelativePath;
+  SmallString<512> SearchPath;
   StringRef Filename = getSpelling(FilenameTok, FilenameBuffer);
   SourceLocation FilenameLoc = FilenameTok.getLocation();
   StringRef OriginalFilename = Filename;
@@ -2233,18 +2280,28 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
   // If GetIncludeFilenameSpelling set the start ptr to null, there was an
   // error.
   assert(!Filename.empty());
-  std::unique_ptr<llvm::MemoryBuffer> MaybeFile =
-      LookupEmbedFile(FilenameLoc, Filename, Params.MaybeLimitParam, isAngled,
-                      nullptr,
-                      &RelativePath, LookupFromFile);
-  if (MaybeFile == nullptr) {
+  Optional<FileEntryRef> MaybeEmbedFileEntry =
+      LookupEmbedFile(FilenameLoc, Filename, Params.MaybeLimitParam, isAngled, nullptr,
+                      &SearchPath, &RelativePath, LookupFromFile);
+  if (!MaybeEmbedFileEntry) {
     // could not find file
     Diag(FilenameTok, diag::err_cannot_open_file) << Filename << "could not find the specified file";
     return;
   }
+  FileEntryRef &EmbedFileEntry = *MaybeEmbedFileEntry;
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> MaybeEmbedData =
+      this->getFileManager().getBufferForFile(&EmbedFileEntry.getFileEntry(), true,
+                                           true, Params.MaybeLimitParam);
+  if (!MaybeEmbedData || MaybeEmbedData.get() == nullptr) {
+    // could not find file
+    Diag(FilenameTok, diag::err_cannot_open_file)
+        << Filename << "could not find the specified file";
+    return;
+  }
   
-  StringRef BinaryContents = MaybeFile->getBuffer();
+  StringRef BinaryContents = MaybeEmbedData.get()->getBuffer();
   const size_t TargetCharWidth = getTargetInfo().getCharWidth();
+  const size_t EmbedElementWidth = CHAR_BIT;
   if (TargetCharWidth > 64) {
     // Too wide for us to handle
     Diag(EmbedTok, diag::err_pp_unsupported_directive)
@@ -2253,7 +2310,7 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
            "properly";
     return;
   }
-  if (CHAR_BIT % TargetCharWidth != 0) {
+  if (EmbedElementWidth % TargetCharWidth != 0) {
     Diag(EmbedTok, diag::err_pp_unsupported_directive)
         << 1
         << "CHAR_BIT is not evenly divisible by host architecture's byte "
@@ -2284,7 +2341,7 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
   std::unique_ptr<Token[]> InitListTokens(new Token[InitListTokensSize]());
 
   if (BinaryContents.empty()) {
-    if (Params.MaybeEmptyParam) {
+    if (Params.MaybeEmptyParam && !Params.MaybeEmptyParam->empty()) {
       std::copy(Params.MaybeEmptyParam->begin(), Params.MaybeEmptyParam->end(),
                 InitListTokens.get());
       TokenIndex += Params.MaybeEmptyParam->size();
@@ -2292,71 +2349,78 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
       EnterTokenStream(std::move(InitListTokens), InitListTokensSize, true,
                        true);
     }
-    return;
-  }
+  } else {
+    // This array must survive for an extended period of time
+    static const char *IntegerLiterals[] = {
+        "0",   "1",   "2",   "3",   "4",   "5",   "6",   "7",   "8",   "9",
+        "10",  "11",  "12",  "13",  "14",  "15",  "16",  "17",  "18",  "19",
+        "20",  "21",  "22",  "23",  "24",  "25",  "26",  "27",  "28",  "29",
+        "30",  "31",  "32",  "33",  "34",  "35",  "36",  "37",  "38",  "39",
+        "40",  "41",  "42",  "43",  "44",  "45",  "46",  "47",  "48",  "49",
+        "50",  "51",  "52",  "53",  "54",  "55",  "56",  "57",  "58",  "59",
+        "60",  "61",  "62",  "63",  "64",  "65",  "66",  "67",  "68",  "69",
+        "70",  "71",  "72",  "73",  "74",  "75",  "76",  "77",  "78",  "79",
+        "80",  "81",  "82",  "83",  "84",  "85",  "86",  "87",  "88",  "89",
+        "90",  "91",  "92",  "93",  "94",  "95",  "96",  "97",  "98",  "99",
+        "100", "101", "102", "103", "104", "105", "106", "107", "108", "109",
+        "110", "111", "112", "113", "114", "115", "116", "117", "118", "119",
+        "120", "121", "122", "123", "124", "125", "126", "127", "128", "129",
+        "130", "131", "132", "133", "134", "135", "136", "137", "138", "139",
+        "140", "141", "142", "143", "144", "145", "146", "147", "148", "149",
+        "150", "151", "152", "153", "154", "155", "156", "157", "158", "159",
+        "160", "161", "162", "163", "164", "165", "166", "167", "168", "169",
+        "170", "171", "172", "173", "174", "175", "176", "177", "178", "179",
+        "180", "181", "182", "183", "184", "185", "186", "187", "188", "189",
+        "190", "191", "192", "193", "194", "195", "196", "197", "198", "199",
+        "200", "201", "202", "203", "204", "205", "206", "207", "208", "209",
+        "210", "211", "212", "213", "214", "215", "216", "217", "218", "219",
+        "220", "221", "222", "223", "224", "225", "226", "227", "228", "229",
+        "230", "231", "232", "233", "234", "235", "236", "237", "238", "239",
+        "240", "241", "242", "243", "244", "245", "246", "247", "248", "249",
+        "250", "251", "252", "253", "254", "255"};
 
-  // This array must survive for an extended period of time
-  static const char *IntegerLiterals[] = {
-      "0",   "1",   "2",   "3",   "4",   "5",   "6",   "7",   "8",   "9",
-      "10",  "11",  "12",  "13",  "14",  "15",  "16",  "17",  "18",  "19",
-      "20",  "21",  "22",  "23",  "24",  "25",  "26",  "27",  "28",  "29",
-      "30",  "31",  "32",  "33",  "34",  "35",  "36",  "37",  "38",  "39",
-      "40",  "41",  "42",  "43",  "44",  "45",  "46",  "47",  "48",  "49",
-      "50",  "51",  "52",  "53",  "54",  "55",  "56",  "57",  "58",  "59",
-      "60",  "61",  "62",  "63",  "64",  "65",  "66",  "67",  "68",  "69",
-      "70",  "71",  "72",  "73",  "74",  "75",  "76",  "77",  "78",  "79",
-      "80",  "81",  "82",  "83",  "84",  "85",  "86",  "87",  "88",  "89",
-      "90",  "91",  "92",  "93",  "94",  "95",  "96",  "97",  "98",  "99",
-      "100", "101", "102", "103", "104", "105", "106", "107", "108", "109",
-      "110", "111", "112", "113", "114", "115", "116", "117", "118", "119",
-      "120", "121", "122", "123", "124", "125", "126", "127", "128", "129",
-      "130", "131", "132", "133", "134", "135", "136", "137", "138", "139",
-      "140", "141", "142", "143", "144", "145", "146", "147", "148", "149",
-      "150", "151", "152", "153", "154", "155", "156", "157", "158", "159",
-      "160", "161", "162", "163", "164", "165", "166", "167", "168", "169",
-      "170", "171", "172", "173", "174", "175", "176", "177", "178", "179",
-      "180", "181", "182", "183", "184", "185", "186", "187", "188", "189",
-      "190", "191", "192", "193", "194", "195", "196", "197", "198", "199",
-      "200", "201", "202", "203", "204", "205", "206", "207", "208", "209",
-      "210", "211", "212", "213", "214", "215", "216", "217", "218", "219",
-      "220", "221", "222", "223", "224", "225", "226", "227", "228", "229",
-      "230", "231", "232", "233", "234", "235", "236", "237", "238", "239",
-      "240", "241", "242", "243", "244", "245", "246", "247", "248", "249",
-      "250", "251", "252", "253", "254", "255"};
-
-  // FIXME: this does not take the target's byte size into account;
-  // will fail on many DSPs and embedded machines!
-  if (Params.MaybePrefixParam) {
-    std::copy(Params.MaybePrefixParam->begin(), Params.MaybePrefixParam->end(),
-              InitListTokens.get() + TokenIndex);
-    TokenIndex += Params.MaybePrefixParam->size();
-  }
-  for (size_t I = 0; I < BinaryContents.size(); ++I) {
-    unsigned char ByteValue = BinaryContents[I];
-    StringRef ByteRepresentation = IntegerLiterals[ByteValue];
-    const size_t InitListIndex = TokenIndex;
-    Token &IntToken = InitListTokens[InitListIndex];
-    IntToken.setKind(tok::numeric_constant);
-    IntToken.setLiteralData(ByteRepresentation.data());
-    IntToken.setLength(ByteRepresentation.size());
-    IntToken.setLocation(FilenameLoc);
-    ++TokenIndex;
-    bool AtEndOfContents = I == (BinaryContents.size() - 1);
-    if (!AtEndOfContents) {
-      const size_t CommaInitListIndex = InitListIndex + 1;
-      Token &CommaToken = InitListTokens[CommaInitListIndex];
-      CommaToken.setKind(tok::comma);
-      CommaToken.setLocation(FilenameLoc);
-      ++TokenIndex;
+    // FIXME: this does not take the target's byte size into account;
+    // will fail on many DSPs and embedded machines!
+    if (Params.MaybePrefixParam) {
+      std::copy(Params.MaybePrefixParam->begin(),
+                Params.MaybePrefixParam->end(),
+                InitListTokens.get() + TokenIndex);
+      TokenIndex += Params.MaybePrefixParam->size();
     }
+    for (size_t I = 0; I < BinaryContents.size(); ++I) {
+      unsigned char ByteValue = BinaryContents[I];
+      StringRef ByteRepresentation = IntegerLiterals[ByteValue];
+      const size_t InitListIndex = TokenIndex;
+      Token &IntToken = InitListTokens[InitListIndex];
+      IntToken.setKind(tok::numeric_constant);
+      IntToken.setLiteralData(ByteRepresentation.data());
+      IntToken.setLength(ByteRepresentation.size());
+      IntToken.setLocation(FilenameLoc);
+      ++TokenIndex;
+      bool AtEndOfContents = I == (BinaryContents.size() - 1);
+      if (!AtEndOfContents) {
+        const size_t CommaInitListIndex = InitListIndex + 1;
+        Token &CommaToken = InitListTokens[CommaInitListIndex];
+        CommaToken.setKind(tok::comma);
+        CommaToken.setLocation(FilenameLoc);
+        ++TokenIndex;
+      }
+    }
+    if (Params.MaybeSuffixParam) {
+      std::copy(Params.MaybeSuffixParam->begin(),
+                Params.MaybeSuffixParam->end(),
+                InitListTokens.get() + TokenIndex);
+      TokenIndex += Params.MaybeSuffixParam->size();
+    }
+    assert(TokenIndex == InitListTokensSize);
+    EnterTokenStream(std::move(InitListTokens), InitListTokensSize, true, true);
   }
-  if (Params.MaybeSuffixParam) {
-    std::copy(Params.MaybeSuffixParam->begin(), Params.MaybeSuffixParam->end(),
-              InitListTokens.get() + TokenIndex);
-    TokenIndex += Params.MaybeSuffixParam->size();
+  if (PPCallbacks *PPC = getPPCallbacks()) {
+    PPC->EmbedDirective(HashLoc, EmbedTok, Filename, isAngled,
+                        CharSourceRange(SourceRange(FilenameLoc), false),
+                        &EmbedFileEntry.getFileEntry(), SearchPath,
+                        RelativePath);
   }
-  assert(TokenIndex == InitListTokensSize);
-  EnterTokenStream(std::move(InitListTokens), InitListTokensSize, true, true);
 }
 
 /// Handle either a #include-like directive or an import declaration that names

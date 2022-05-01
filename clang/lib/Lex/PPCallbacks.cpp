@@ -28,3 +28,8 @@ void PPChainedCallbacks::HasInclude(SourceLocation Loc, StringRef FileName,
   Second->HasInclude(Loc, FileName, IsAngled, File, FileType);
 }
 
+void PPChainedCallbacks::HasEmbed(SourceLocation Loc, StringRef FileName,
+                                  bool IsAngled, Optional<FileEntryRef> File) {
+  First->HasEmbed(Loc, FileName, IsAngled, File);
+  Second->HasEmbed(Loc, FileName, IsAngled, File);
+}

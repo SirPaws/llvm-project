@@ -133,7 +133,7 @@ public:
 
   
   virtual void EmbedDirective(SourceLocation HashLoc,
-                              const Token &IncludeTok, StringRef FileName,
+                              const Token &EmbedTok, StringRef FileName,
                               bool IsAngled, CharSourceRange FilenameRange,
                               const FileEntry *File, StringRef SearchPath,
                               StringRef RelativePath) {}
@@ -465,6 +465,12 @@ public:
            Second->FileNotFound(FileName, RecoveryPath);
   }
 
+  virtual bool EmbedFileNotFound(StringRef FileName,
+                                 SmallVectorImpl<char> &RecoveryPath) override {
+    return First->EmbedFileNotFound(FileName, RecoveryPath) ||
+           Second->FileNotFound(FileName, RecoveryPath);
+  }
+
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange, const FileEntry *File,
@@ -570,6 +576,9 @@ public:
   void HasInclude(SourceLocation Loc, StringRef FileName, bool IsAngled,
                   Optional<FileEntryRef> File,
                   SrcMgr::CharacteristicKind FileType) override;
+
+  void HasEmbed(SourceLocation Loc, StringRef FileName, bool IsAngled,
+                Optional<FileEntryRef> File) override;
 
   void PragmaOpenCLExtension(SourceLocation NameLoc, const IdentifierInfo *Name,
                              SourceLocation StateLoc, unsigned State) override {

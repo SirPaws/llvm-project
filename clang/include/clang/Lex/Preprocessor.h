@@ -2074,12 +2074,11 @@ public:
              ModuleMap::KnownHeader *SuggestedModule, bool *IsMapped,
              bool *IsFrameworkFound, bool SkipCache = false);
 
-  std::unique_ptr<llvm::MemoryBuffer>
-  LookupEmbedFile(SourceLocation FilenameLoc, StringRef Filename,
-                  Optional<size_t> MaybeLimit, bool isAngled,
-                  SmallVectorImpl<char> *SearchPath,
-                  SmallVectorImpl<char> *RelativePath,
-                  const FileEntry *LookupFromFile);
+  Optional<FileEntryRef> LookupEmbedFile(
+      SourceLocation FilenameLoc, StringRef Filename,
+      Optional<size_t> MaybeLimit, bool isAngled,
+      const SmallVectorImpl<char> *LocalPath, SmallVectorImpl<char> *SearchPath,
+      SmallVectorImpl<char> *RelativePath, const FileEntry *LookupFromFile);
 
   /// Get the DirectoryLookup structure used to find the current
   /// FileEntry, if CurLexer is non-null and if applicable.

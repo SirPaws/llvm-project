@@ -1248,7 +1248,7 @@ static bool EvaluateHasIncludeCommon(Token &Tok,
 
 /// EvaluateHasEmbed - Process a '__has_embed("foo" params...)' expression.
 /// Returns true if successful.
-static bool EvaluateHasEmbed(Token &Tok, IdentifierInfo *II,
+static int EvaluateHasEmbed(Token &Tok, IdentifierInfo *II,
                                Preprocessor &PP) {
   // Discard initial left paren
   PP.Lex(Tok);
@@ -1260,40 +1260,65 @@ static bool EvaluateHasEmbed(Token &Tok, IdentifierInfo *II,
   Token FilenameTok;
   // Parse the filename header
   if (PP.LexHeaderName(FilenameTok))
-    return false;
+    return 0;
 
   if (FilenameTok.isNot(tok::header_name)) {
     PP.Diag(FilenameTok.getLocation(), diag::err_pp_expects_filename);
     if (FilenameTok.isNot(tok::eod))
       PP.DiscardUntilEndOfDirective();
-    return false;
+    return 0;
   }
-
-  Preprocessor::LexEmbedParametersResult Params = PP.LexEmbedParameters(Tok, true, false);
-  if (!Params.Successful || Params.UnrecognizedParams > 0) {
-    return false;
-  }
-
   SmallString<128> FilenameBuffer;
-  SmallString<256> RelativePath;
   StringRef Filename = PP.getSpelling(FilenameTok, FilenameBuffer);
-  SourceLocation FilenameLoc = FilenameTok.getLocation();
   StringRef OriginalFilename = Filename;
   bool isAngled =
       PP.GetIncludeFilenameSpelling(FilenameTok.getLocation(), Filename);
+  SourceLocation FilenameLoc = FilenameTok.getLocation();
+
+  Preprocessor::LexEmbedParametersResult Params = PP.LexEmbedParameters(Tok, true, false);
+  if (!Params.Successful || Params.UnrecognizedParams > 0) {
+    PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled, None);
+    return 0;
+  }
+
+  SmallString<256> RelativePath;
+  SmallString<256> SearchPath;
   // If GetIncludeFilenameSpelling set the start ptr to null, there was an
   // error.
   assert(!Filename.empty());
   const FileEntry *LookupFromFile =
       PP.getCurrentFileLexer() ? PP.getCurrentFileLexer()->getFileEntry()
                                : nullptr;
-  std::unique_ptr<llvm::MemoryBuffer> MaybeFile =
-      PP.LookupEmbedFile(FilenameLoc, Filename, Params.MaybeLimitParam,
-                         isAngled, nullptr, &RelativePath, LookupFromFile);
-  if (MaybeFile == nullptr) {
-    return false;
+  Optional<FileEntryRef> MaybeEmbedFileEntry = PP.LookupEmbedFile(
+      FilenameLoc, Filename, Params.MaybeLimitParam, isAngled, nullptr,
+      &SearchPath, &RelativePath, LookupFromFile);
+  if (!MaybeEmbedFileEntry) {
+    PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled, None);
+    return 0;
   }
-  return true;
+  FileEntryRef &EmbedFileEntry = *MaybeEmbedFileEntry;
+  // okay, so the file exists. Let's check it.
+  if (Params.MaybeLimitParam && Params.MaybeLimitParam.getValue() < 1) {
+    PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled,
+                                  EmbedFileEntry);
+    return 2;
+  }
+  if (EmbedFileEntry.getSize() < 1) {
+    PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled,
+                                  EmbedFileEntry);
+    return 2;
+  }
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> MaybeEmbedData =
+      PP.getFileManager().getBufferForFile(&EmbedFileEntry.getFileEntry(), true,
+                                           true, Params.MaybeLimitParam);
+  if (!MaybeEmbedData && *MaybeEmbedData) {
+    // something went catastrophically wrong: state the file doesn't exist
+    PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled, None);
+    return 0;
+  }
+  
+  PP.getPPCallbacks()->HasEmbed(FilenameLoc, Filename, isAngled, EmbedFileEntry);
+  return 1;
 }
 
 /// EvaluateHasInclude - Process a '__has_include("path")' expression.
@@ -1797,10 +1822,10 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     OS << (int)Value;
     Tok.setKind(tok::numeric_constant);
   } else if (II == Ident__has_embed) {
-    bool Value = EvaluateHasEmbed(Tok, II, *this);
+    int Value = EvaluateHasEmbed(Tok, II, *this);
     if (Tok.isNot(tok::r_paren))
       return;
-    OS << (int)Value;
+    OS << Value;
     Tok.setKind(tok::numeric_constant);
   } else if (II == Ident__has_warning) {
     // The argument should be a parenthesized string literal.
