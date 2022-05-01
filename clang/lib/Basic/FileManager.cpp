@@ -557,14 +557,15 @@ FileManager::getBufferForFile(FileEntryRef FE, bool isVolatile,
   StringRef Filename = FE.getName();
   // If the file is already open, use the open file descriptor.
   if (Entry->File) {
-    auto Result = Entry->File->getBuffer(Filename, FileSize,
+    auto Result = Entry->File->getBuffer(Filename, MaybeLimit ? *MaybeLimit : FileSize,
                                          RequiresNullTerminator, isVolatile);
     Entry->closeFile();
     return Result;
   }
 
   // Otherwise, open the file.
-  return getBufferForFileImpl(Filename, FileSize, isVolatile,
+  return getBufferForFileImpl(Filename, MaybeLimit ? *MaybeLimit : FileSize,
+                              isVolatile,
                               RequiresNullTerminator);
 }
 
