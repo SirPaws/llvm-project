@@ -525,7 +525,7 @@ FileManager::getBufferForFile(const FileEntry *Entry, bool isVolatile,
   if (Entry->Content)
     return llvm::MemoryBuffer::getMemBuffer(Entry->Content->getMemBufferRef());
 
-  uint64_t FileSize = MaybeLimit ? *MaybeLimit : Entry->getSize();
+  uint64_t FileSize = Entry->getSize();
   // If there's a high enough chance that the file have changed since we
   // got its size, force a stat before opening it.
   if (isVolatile || Entry->isNamedPipe())
@@ -534,14 +534,15 @@ FileManager::getBufferForFile(const FileEntry *Entry, bool isVolatile,
   StringRef Filename = Entry->getName();
   // If the file is already open, use the open file descriptor.
   if (Entry->File) {
-    auto Result = Entry->File->getBuffer(Filename, FileSize,
+    auto Result = Entry->File->getBuffer(Filename, MaybeLimit ? *MaybeLimit : FileSize,
                                          RequiresNullTerminator, isVolatile);
     Entry->closeFile();
     return Result;
   }
 
   // Otherwise, open the file.
-  return getBufferForFileImpl(Filename, FileSize, isVolatile,
+  return getBufferForFileImpl(Filename, MaybeLimit ? *MaybeLimit : FileSize,
+                              isVolatile,
                               RequiresNullTerminator);
 }
 

@@ -2290,8 +2290,8 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
   }
   FileEntryRef &EmbedFileEntry = *MaybeEmbedFileEntry;
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> MaybeEmbedData =
-      this->getFileManager().getBufferForFile(&EmbedFileEntry.getFileEntry(), true,
-                                           true, Params.MaybeLimitParam);
+      this->getFileManager().getBufferForFile(
+          &EmbedFileEntry.getFileEntry(), false, true, Params.MaybeLimitParam);
   if (!MaybeEmbedData || MaybeEmbedData.get() == nullptr) {
     // could not find file
     Diag(FilenameTok, diag::err_cannot_open_file)
@@ -2300,6 +2300,12 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
   }
   
   StringRef BinaryContents = MaybeEmbedData.get()->getBuffer();
+  if (Params.MaybeLimitParam &&
+      BinaryContents.size() > Params.MaybeLimitParam.getValue()) {
+    // The file may have needed to be stat'd since it was considered volatile and the size
+    // was reset. Force the new size to be used here.
+    BinaryContents = StringRef(BinaryContents.data(), Params.MaybeLimitParam.getValue());
+  }
   const size_t TargetCharWidth = getTargetInfo().getCharWidth();
   const size_t EmbedElementWidth = CHAR_BIT;
   if (TargetCharWidth > 64) {
