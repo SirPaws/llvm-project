@@ -82,7 +82,8 @@ struct DepCollectorPPCallbacks : public PPCallbacks {
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange, const FileEntry *File,
                           StringRef SearchPath, StringRef RelativePath) override {
-    DepCollector.maybeAddDependency(FileName, /*FromModule*/ false,
+    DepCollector.maybeAddDependency(
+        File == nullptr ? FileName : File->getName(), /*FromModule*/ false,
                                       /*IsSystem*/ false,
                                       /*IsModuleFile*/ false,
                                       /*IsMissing*/ File == nullptr);
