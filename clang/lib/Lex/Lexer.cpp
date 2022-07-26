@@ -436,6 +436,10 @@ unsigned Lexer::getSpelling(const Token &Tok, const char *&Buffer,
 
   // If this token contains nothing interesting, return it directly.
   if (!Tok.needsCleaning()) {
+    if (Tok.is(tok::comma)) {
+      Buffer = ",";
+      return 1;
+    }
     Buffer = TokStart;
     return Tok.getLength();
   }

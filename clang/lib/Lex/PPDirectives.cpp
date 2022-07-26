@@ -2409,6 +2409,7 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
         Token &CommaToken = InitListTokens[CommaInitListIndex];
         CommaToken.setKind(tok::comma);
         CommaToken.setLocation(FilenameLoc);
+        CommaToken.setLength(1);
         ++TokenIndex;
       }
     }
