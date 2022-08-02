@@ -9815,6 +9815,157 @@ static bool lookupMaybeTransparentAliasDecl(
   return *DeclOut != nullptr && *SucessfulLookupsOut > 0;
 }
 
+OverloadedOperatorKind GetOperatorBindingKind(Token OpToken) {
+  switch (OpToken.getKind()) {
+  case tok::plus:
+    return OverloadedOperatorKind::OO_Plus;
+  case tok::minus:
+    return OverloadedOperatorKind::OO_Minus;
+  case tok::star:
+    return OverloadedOperatorKind::OO_Star;
+  case tok::slash:
+    return OverloadedOperatorKind::OO_Slash;
+  case tok::percent:
+    return OverloadedOperatorKind::OO_Percent;
+  case tok::caret:
+    return OverloadedOperatorKind::OO_Caret;
+  case tok::amp:
+    return OverloadedOperatorKind::OO_Amp;
+  case tok::pipe:
+    return OverloadedOperatorKind::OO_Pipe;
+  case tok::less:
+    return OverloadedOperatorKind::OO_Less;
+  case tok::greater:
+    return OverloadedOperatorKind::OO_Greater;
+  case tok::lessless:
+    return OverloadedOperatorKind::OO_LessLess;
+  case tok::greatergreater:
+    return OverloadedOperatorKind::OO_GreaterGreater;
+  case tok::equalequal:
+    return OverloadedOperatorKind::OO_EqualEqual;
+  case tok::exclaimequal:
+    return OverloadedOperatorKind::OO_ExclaimEqual;
+  case tok::lessequal:
+    return OverloadedOperatorKind::OO_LessEqual;
+  case tok::greaterequal:
+    return OverloadedOperatorKind::OO_GreaterEqual;
+  case tok::ampamp:
+    return OverloadedOperatorKind::OO_AmpAmp;
+  case tok::pipepipe:
+    return OverloadedOperatorKind::OO_PipePipe;
+  case tok::tilde:
+    return OverloadedOperatorKind::OO_Tilde;
+  case tok::exclaim:
+    return OverloadedOperatorKind::OO_Exclaim;
+  default:
+    return OverloadedOperatorKind::OO_None;
+  }
+}
+
+NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken, unsigned int NumTypes,
+                                      TypeResult &FirstType,
+                                      TypeResult &SecondType,
+                                      SourceLocation NameLoc,
+                                      IdentifierInfo &FunctionName) {
+  DeclarationName DeclName(&FunctionName);
+  LookupResult NameLookup(*this, DeclName, NameLoc,
+                          Sema::LookupOrdinaryName);
+
+  if (!LookupName(NameLookup, S)) {
+    Diag(NameLoc, diag::err_undeclared_var_use) << &FunctionName;
+    return nullptr;
+  }
+
+  NamedDecl *FoundDecl = NameLookup.getFoundDecl();
+  if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
+    if (FnDecl->getNumParams() != NumTypes) {
+        return nullptr;
+    }
+    auto GetType = [](auto Ast) {
+        if constexpr (std::is_convertible_v < decltype(Ast), ParmVarDecl *>) {
+          return Ast->getType();
+        } else {
+          return Ast.get();
+        }
+    };
+    auto isSameType = [GetType](ASTContext& Context, ParsedType& Type, ParmVarDecl *ParameterType) {
+      QualType QualifiedType = GetType(Type);
+      QualType CanonicalType = QualifiedType.getCanonicalType();
+
+      QualType QualifiedParamterType = GetType(ParameterType);
+      QualType CanonicalParamterType = QualifiedType.getCanonicalType();
+      return Context.hasSameUnqualifiedType(CanonicalType, CanonicalParamterType)
+          && (QualifiedParamterType.getQualifiers() ==
+                 QualifiedType.getQualifiers());
+    };
+
+    if (!isSameType(Context, FirstType.get(), FnDecl->getParamDecl(0))) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+      return nullptr;
+    }
+
+    if (NumTypes == 2) {
+      if (!isSameType(Context, SecondType.get(), FnDecl->getParamDecl(1))) {
+        Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+        return nullptr;
+      }
+    }
+
+       
+      OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
+    if (OperatorKind == OverloadedOperatorKind::OO_None) {
+      Diag(OpToken.getLocation(), diag::err_operator_binding_invalid_binary_op);
+      return nullptr;
+    }
+
+    DeclContext *DC = CurScope->getEntity();
+    unsigned SymbolIdx = 0;
+    SourceLocation SymbolLocations[3]{OpToken.getLocation()};
+
+    UnqualifiedId Id;
+    Id.setOperatorFunctionId(OperatorKeywordLoc, OperatorKind, 
+                             SymbolLocations);
+    DeclarationNameInfo NameInfo = GetNameFromUnqualifiedId(Id);
+
+    FunctionDecl *NewDecl = FunctionDecl::Create(
+        Context, DC, OperatorKeywordLoc, NameLoc, NameInfo.getName(),
+        FnDecl->getType(),
+        nullptr,
+        SC_Static, false, false, FnDecl->hasWrittenPrototype(),
+        FnDecl->getConstexprKind(), nullptr);
+    if (const FunctionProtoType *FT =
+            dyn_cast<FunctionProtoType>(FnDecl->getType())) {
+      SmallVector<ParmVarDecl *, 16> Params;
+      for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
+        ParmVarDecl *parm = ParmVarDecl::Create(
+            Context, NewDecl, SourceLocation(), SourceLocation(), nullptr,
+            FT->getParamType(i), /*TInfo=*/nullptr, SC_None, nullptr);
+        parm->setScopeInfo(0, i);
+        Params.push_back(parm);
+      }
+      NewDecl->setParams(Params);
+    }
+    NewDecl->setImplicit(FnDecl->isImplicit());
+    SourceLocation TrueNameLocation = FnDecl->getLocation();
+    StringRef TrueOldName = FnDecl->getName();
+
+    // Gives us the equivalent of adding the asm label: void foo (void)
+    // asm("bar") Model the new function declaration after the asm("...")
+    // label extension, which gives us teh functionality we want!
+    // Make sure to use the ACTUAL most derived old name!
+    NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
+                                          /*IsLiteralLabel=*/true,
+                                          TrueNameLocation));
+    NewDecl->setNonMemberOperator();
+    NewDecl->addAttr(TransparentAliasAttr::Create(Context, false,
+                                                  FnDecl, NameLoc));
+    PushOnScopeChains(NewDecl, CurScope);
+    return NewDecl;
+  }
+  Diag(NameLoc, diag::err_operator_binding_arg_not_function) << &FunctionName;
+  return nullptr;
+}
+
 NamedDecl *Sema::ActOnTransparentAliasDeclaration(
     Scope *CurScope, SourceLocation AliasLoc, bool IsWeak,
     SourceLocation WeakLoc, IdentifierInfo &NewName, SourceLocation NewNameLoc,

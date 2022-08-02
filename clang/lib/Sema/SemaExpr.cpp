@@ -16267,7 +16267,8 @@ ExprResult Sema::BuildBinOp(Scope *S, SourceLocation OpLoc,
     RHSExpr = resolvedRHS.get();
   }
 
-  if (getLangOpts().CPlusPlus) {
+  // if (getLangOpts().CPlusPlus) {
+  if (getLangOpts().CPlusPlus || Opc != BO_Assign) {
     // If either expression is type-dependent, always build an
     // overloaded op.
     if (LHSExpr->isTypeDependent() || RHSExpr->isTypeDependent())
@@ -16279,6 +16280,7 @@ ExprResult Sema::BuildBinOp(Scope *S, SourceLocation OpLoc,
         RHSExpr->getType()->isOverloadableType())
       return BuildOverloadedBinOp(*this, S, OpLoc, Opc, LHSExpr, RHSExpr);
   }
+  // }
 
   if (getLangOpts().RecoveryAST &&
       (LHSExpr->isTypeDependent() || RHSExpr->isTypeDependent())) {
@@ -16665,7 +16667,17 @@ ExprResult Sema::BuildUnaryOp(Scope *S, SourceLocation OpLoc,
     Input = Result.get();
   }
 
-  if (getLangOpts().CPlusPlus && Input->getType()->isOverloadableType() &&
+  if (!getLangOpts().CPlusPlus) {
+      auto unused = Input->getType().getAsString();
+      if (Input->getType()->isOverloadableType() &&
+          UnaryOperator::getOverloadedOperator(Opc) != OO_None) {
+      UnresolvedSet<16> Functions;
+      OverloadedOperatorKind OverOp = UnaryOperator::getOverloadedOperator(Opc);
+      if (S && OverOp != OO_None)
+        LookupOverloadedOperatorName(OverOp, S, Functions);
+      return CreateOverloadedUnaryOp(OpLoc, Opc, Functions, Input);
+    }
+  } else if (Input->getType()->isOverloadableType() &&
       UnaryOperator::getOverloadedOperator(Opc) != OO_None &&
       !(Opc == UO_AddrOf && isQualifiedMemberAccess(Input))) {
     // Find all of the overloaded operators visible from this point.

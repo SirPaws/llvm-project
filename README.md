@@ -1,3 +1,25 @@
+# Branch Info
+this branch adds a new keyword in C mode.
+namely the `_Operator` keyword, which allows operator overloading in C.
+I've chosen to name this feature operator binding as that is what's actually
+happening. here is a short example showing how this extension works
+```c
+typedef struct vec3 { float x, y, z; } vec3;
+
+vec3 add_vector3(vec3 a, vec3 b) {
+  return (vec3){ a.x + b.x, a.y + b.y, a.z + b.z };
+}
+_Operator(+, vec3, vec3, add_vector3);
+
+int main(void) {
+  vec3 a = { 1, 2, 3};
+  vec3 b = { 4, 3, 2};
+
+  vec3 c = a + b;
+  printf("{ %f, %f, %f }\n"); // prints { 5, 5, 5 }
+}
+```
+
 # The LLVM Compiler Infrastructure
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/llvm/llvm-project/badge)](https://securityscorecards.dev/viewer/?uri=github.com/llvm/llvm-project)

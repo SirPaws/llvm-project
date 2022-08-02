@@ -2976,6 +2976,13 @@ public:
                                      MultiTemplateParamsArg TemplateParamLists,
                                      bool &AddToScope);
   bool AddOverriddenMethods(CXXRecordDecl *DC, CXXMethodDecl *MD);
+  
+  NamedDecl *ActOnOperatorBinding(
+      Scope *S, SourceLocation OperatorKeywordLoc,
+      Token OpToken, unsigned int NumTypes,
+      TypeResult &FirstType, TypeResult &SecondType,
+      SourceLocation NameLoc,
+      IdentifierInfo &FunctionNamee);
 
   NamedDecl *ActOnTransparentAliasDeclaration(
       Scope *S, SourceLocation AliasLoc, bool IsWeak, SourceLocation WeakLoc,
