@@ -1,8 +1,8 @@
-# Branch Info
-this branch adds a new keyword in C mode.
-namely the `_Operator` keyword, which allows operator overloading in C.
-I've chosen to name this feature operator binding as that is what's actually
-happening. here is a short example showing how this extension works
+this branch adds a new keyword to C (not C++). namely the `_Operator` keyword. which allows operator overloading in C. 
+
+The Idea wasn't mine, it was shamelessly stolen from this [tweet](https://twitter.com/__phantomderp/status/1553407797613760513)
+
+here is a short example showing how this extension works
 ```c
 typedef struct vec3 { float x, y, z; } vec3;
 
