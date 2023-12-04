@@ -8130,6 +8130,13 @@ def err_capture_block_variable : Error<
   "__block variable %0 cannot be captured in a "
   "%select{lambda expression|captured statement}1">;
 
+def err_operator_binding_arg_not_function : Error<
+    "'_Operator' argument %0 is not a function">;
+def err_operator_binding_invalid_binary_op : Error<
+    "'_Operator' types do not match the types of the functions arguments">;
+def err_operator_binding_type_mismatch : Error<
+    "token is not a valid binary operator">;
+
 def err_operator_arrow_circular : Error<
   "circular pointer delegation detected">;
 def err_operator_arrow_depth_exceeded : Error<
