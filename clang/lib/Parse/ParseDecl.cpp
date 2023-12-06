@@ -1972,7 +1972,9 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
 /// operator overloading in C
 /// declaration, which should match the behavior we want.
 ///   operator-binding-declaration:
-///     '_Operator' (token, type..., identifier)
+///     '_Operator' '(' bindable-operator ')' identifier 
+///   bindable-operator:
+///     [any of] + - * / % ^ & | ~ ! < > << >> == != <= >= && ||
 Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &DeclEnd) {
   const LangOptions &LangOpts = getLangOpts();
   bool IsCOnly =
@@ -2009,41 +2011,7 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
   }
   ConsumeToken();
 
-  if (ExpectAndConsume(tok::comma)) {
-    Diag(Tok, diag::err_expected) << tok::comma;
-    SkipMalformedDecl();
-    return nullptr;
-  }
-
-  auto FirstType = ParseTypeName();
-  if (FirstType.isInvalid()) {
-    return nullptr;
-  }
-  if (ExpectAndConsume(tok::comma)) {
-    Diag(Tok, diag::err_expected) << tok::comma;
-    SkipMalformedDecl();
-    return nullptr;
-  }
-  unsigned int NumTypes = 1;
-
-  TypeResult SecondType;
   Token IdentifierToken = Tok;
-  if (!NextToken().is(tok::r_paren)) {
-    SecondType = ParseTypeName();
-    if (SecondType.isInvalid()) {
-      SkipMalformedDecl();
-      return nullptr;
-    }
-    if (ExpectAndConsume(tok::comma)) {
-      Diag(Tok, diag::err_expected) << tok::comma;
-      SkipMalformedDecl();
-      return nullptr;
-    }
-    IdentifierToken = Tok;
-    NumTypes = 2;
-  }
-  Tok = IdentifierToken;
-
   if (expectIdentifier()) {
     Diag(Tok, diag::err_expected) << tok::identifier;
     SkipMalformedDecl();
@@ -2064,9 +2032,7 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
   IdentifierInfo *Identifier = IdentifierToken.getIdentifierInfo();
 
   return Actions.ActOnOperatorBinding(getCurScope(), OperatorLoc, OpToken,
-                                      NumTypes, FirstType,
-                                      SecondType, IdentifierLocation,
-                                      *Identifier);
+                                      IdentifierLocation, *Identifier);
 }
 
 /// This routine covers the _Alias declarations in N2901,

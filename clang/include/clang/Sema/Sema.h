@@ -2979,9 +2979,7 @@ public:
   
   NamedDecl *ActOnOperatorBinding(
       Scope *S, SourceLocation OperatorKeywordLoc,
-      Token OpToken, unsigned int NumTypes,
-      TypeResult &FirstType, TypeResult &SecondType,
-      SourceLocation NameLoc,
+      Token OpToken, SourceLocation NameLoc,
       IdentifierInfo &FunctionNamee);
 
   NamedDecl *ActOnTransparentAliasDeclaration(
