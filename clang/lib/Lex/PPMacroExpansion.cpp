@@ -1308,12 +1308,6 @@ EmbedResult Preprocessor::EvaluateHasEmbed(Token &Tok, IdentifierInfo *II) {
     Diag(Tok.getLocation(), diag::err_pp_expects_filename);
     return EmbedResult::Invalid;
   }
-  SmallString<128> FilenameBuffer;
-  StringRef Filename = PP.getSpelling(FilenameTok, FilenameBuffer);
-  StringRef OriginalFilename = Filename;
-  bool isAngled =
-      PP.GetIncludeFilenameSpelling(FilenameTok.getLocation(), Filename);
-  SourceLocation FilenameLoc = FilenameTok.getLocation();
 
   SourceLocation FilenameLoc = Tok.getLocation();
   Token FilenameTok = Tok;

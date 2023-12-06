@@ -9757,6 +9757,32 @@ static void checkIsValidOpenCLKernelParameter(
     }
   } while (!VisitStack.empty());
 }
+/// Determine whether a declaration matches a known function in namespace std.
+static bool isStdBuiltin(ASTContext &Ctx, FunctionDecl *FD,
+                         unsigned BuiltinID) {
+  switch (BuiltinID) {
+  case Builtin::BI__GetExceptionInfo:
+    // No type checking whatsoever.
+    return Ctx.getTargetInfo().getCXXABI().isMicrosoft();
+
+  case Builtin::BIaddressof:
+  case Builtin::BI__addressof:
+  case Builtin::BIforward:
+  case Builtin::BIforward_like:
+  case Builtin::BImove:
+  case Builtin::BImove_if_noexcept:
+  case Builtin::BIas_const: {
+    // Ensure that we don't treat the algorithm
+    //   OutputIt std::move(InputIt, InputIt, OutputIt)
+    // as the builtin std::move.
+    const auto *FPT = FD->getType()->castAs<FunctionProtoType>();
+    return FPT->getNumParams() == 1 && !FPT->isVariadic();
+  }
+
+  default:
+    return false;
+  }
+}
 
 /// Find the DeclContext in which a tag is implicitly declared if we see an
 /// elaborated type specifier in the specified context, and lookup finds
@@ -10090,7 +10116,7 @@ NamedDecl *Sema::ActOnTransparentAliasDeclaration(
                                         /*IsLiteralLabel=*/true, OldNameLoc));
   if (IsWeak) {
     // Mark the function declaration as weak!
-    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, AttributeCommonInfo::AS_Keyword));
+    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, WeakAttr::Spelling::C23_gnu_weak));
   }
   NewDecl->addAttr(TransparentAliasAttr::Create(Context, IsWeak, OldFunctionDecl, AliasLoc));
   PushOnScopeChains(NewDecl, CurScope);

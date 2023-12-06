@@ -3191,7 +3191,7 @@ private:
                             ParsedAttributes &attrs);
   Decl *ParseTransparentAlias(DeclaratorContext Context,
                               SourceLocation &DeclEnd,
-                              ParsedAttributesWithRange &attrs);
+                              ParsedAttributes &attrs);
 
   Decl *ParseOperatorBinding(DeclaratorContext Context,
                               SourceLocation &DeclEnd);

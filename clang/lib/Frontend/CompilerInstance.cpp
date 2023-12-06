@@ -455,7 +455,7 @@ void CompilerInstance::createPreprocessor(TranslationUnitKind TUKind) {
                        getDiagnostics(), getLangOpts(), &getTarget());
   PP = std::make_shared<Preprocessor>(
       Invocation->getPreprocessorOptsPtr(), getDiagnostics(), getLangOpts(),
-      getBinarySearchOpts(), getSourceManager(), *HeaderInfo, *this,
+      getSourceManager(), *HeaderInfo, *this,
       /*IdentifierInfoLookup=*/nullptr,
       /*OwnsHeaderSearch=*/true, TUKind);
   getTarget().adjust(getDiagnostics(), getLangOpts());

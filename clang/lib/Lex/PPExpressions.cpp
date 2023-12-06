@@ -910,7 +910,7 @@ Preprocessor::EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
   // If we are at the end of the expression after just parsing a value, there
   // must be no (unparenthesized) binary operators involved, so we can exit
   // directly.
-  if (Tok.is(tok::eod) || (Parenthesized && Tok.is(tok::r_paren))) {
+  if (Tok.is(tok::eod)) {
     // If the expression we parsed was of the form !defined(macro), return the
     // macro in IfNDefMacro.
     if (DT.State == DefinedTracker::NotDefinedMacro)

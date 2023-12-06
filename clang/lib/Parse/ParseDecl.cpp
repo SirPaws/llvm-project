@@ -1910,6 +1910,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
   // Must temporarily exit the objective-c container scope for
   // parsing c none objective-c decls.
   ObjCDeclContextSwitch ObjCDC(*this);
+  ParsedAttributes Attrs(AttrFactory);
 
   Decl *SingleDecl = nullptr;
   switch (Tok.getKind()) {
@@ -1940,16 +1941,16 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
     ProhibitAttributes(DeclSpecAttrs);
     return ParseNamespace(Context, DeclEnd);
   case tok::kw_using: {
-    ParsedAttributes Attrs(AttrFactory);
     takeAndConcatenateAttrs(DeclAttrs, DeclSpecAttrs, Attrs);
     return ParseUsingDirectiveOrDeclaration(Context, ParsedTemplateInfo(),
-                                            DeclEnd, attrs);
+                                            DeclEnd, Attrs);
+    }
   case tok::kw__Operator:
     SingleDecl = ParseOperatorBinding(Context, DeclEnd);
     break;
   case tok::kw__Alias:
   case tok::kw__Weak:
-    SingleDecl = ParseTransparentAlias(Context, DeclEnd, attrs);
+    SingleDecl = ParseTransparentAlias(Context, DeclEnd, Attrs);
     break;
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
@@ -1975,7 +1976,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
 Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &DeclEnd) {
   const LangOptions &LangOpts = getLangOpts();
   bool IsCOnly =
-      (LangOpts.C99 || LangOpts.C11 || LangOpts.C2x || LangOpts.C17) &&
+      (LangOpts.C99 || LangOpts.C11 || LangOpts.C23 || LangOpts.C17) &&
       !(LangOpts.CPlusPlus);
   if (!IsCOnly) {
     Diag(diag::err_type_unsupported) << "_Operator (C only)";
@@ -2080,10 +2081,10 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
 ///     '(weak)'
 Decl*
 Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd,
-                         ParsedAttributesWithRange &attrs) {
+                         ParsedAttributes &attrs) {
   const LangOptions &LangOpts = getLangOpts();
   bool IsCOnly =
-      (LangOpts.C99 || LangOpts.C11 || LangOpts.C2x || LangOpts.C17) &&
+      (LangOpts.C99 || LangOpts.C11 || LangOpts.C23 || LangOpts.C17) &&
       !(LangOpts.CPlusPlus);
   if (!IsCOnly) {
     Diag(diag::err_type_unsupported) << "_Alias (C only)";
@@ -2107,7 +2108,7 @@ Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd
   SourceLocation NewAliasLoc = Tok.getLocation();
   ConsumeToken();
   
-  ParsedAttributesWithRange AttrsOnAlias(AttrFactory);
+  ParsedAttributes AttrsOnAlias(AttrFactory);
   MaybeParseCXX11Attributes(AttrsOnAlias);
   if (ExpectAndConsume(tok::equal)) {
     return nullptr;

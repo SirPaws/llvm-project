@@ -1205,7 +1205,6 @@ public:
   void setDiagnostics(DiagnosticsEngine &D) { Diags = &D; }
 
   const LangOptions &getLangOpts() const { return LangOpts; }
-  BinarySearchOptions &getBinarySearchOpts() const { return BinarySearchOpts; }
   const TargetInfo &getTargetInfo() const { return *Target; }
   const TargetInfo *getAuxTargetInfo() const { return AuxTarget; }
   FileManager &getFileManager() const { return FileMgr; }
@@ -2736,8 +2735,6 @@ private:
   void HandleIncludeDirective(SourceLocation HashLoc, Token &Tok,
                               ConstSearchDirIterator LookupFrom = nullptr,
                               const FileEntry *LookupFromFile = nullptr);
-  void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok,
-                            const FileEntry *LookupFromFile = nullptr);
   ImportAction
   HandleHeaderIncludeOrImport(SourceLocation HashLoc, Token &IncludeTok,
                               Token &FilenameTok, SourceLocation EndLoc,

@@ -381,10 +381,6 @@ public:
                           OptionalFileEntryRef File,
                           SrcMgr::CharacteristicKind FileType);
 
-  /// Hook called when a '__has_embed' directive is read.
-  virtual void HasEmbed(SourceLocation Loc, StringRef FileName, bool IsAngled,
-                        Optional<FileEntryRef> File) {}
-
   /// Hook called when a source range is skipped.
   /// \param Range The SourceRange that was skipped. The range begins at the
   /// \#if/\#else directive and ends after the \#endif/\#else directive.
@@ -533,12 +529,6 @@ public:
     return Skip;
   }
 
-  virtual bool EmbedFileNotFound(StringRef FileName,
-                                 SmallVectorImpl<char> &RecoveryPath) override {
-    return First->EmbedFileNotFound(FileName, RecoveryPath) ||
-           Second->FileNotFound(FileName, RecoveryPath);
-  }
-
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange,
@@ -650,9 +640,6 @@ public:
   void HasInclude(SourceLocation Loc, StringRef FileName, bool IsAngled,
                   OptionalFileEntryRef File,
                   SrcMgr::CharacteristicKind FileType) override;
-
-  void HasEmbed(SourceLocation Loc, StringRef FileName, bool IsAngled,
-                Optional<FileEntryRef> File) override;
 
   void PragmaOpenCLExtension(SourceLocation NameLoc, const IdentifierInfo *Name,
                              SourceLocation StateLoc, unsigned State) override {

@@ -164,16 +164,6 @@ public:
     return false;
   }
 
-  /// Receives the binary search options.
-  ///
-  /// \returns true to indicate the binary search options are invalid, or false
-  /// otherwise.
-  virtual bool ReadBinarySearchOptions(const BinarySearchOptions &BinaryOpts,
-                                       StringRef SpecificModuleCachePath,
-                                       bool Complain) {
-    return false;
-  }
-
   /// Receives the header search options.
   ///
   /// \param HSOpts The read header search options. The following fields are
@@ -283,9 +273,6 @@ public:
                              bool Complain) override;
 
   bool ReadHeaderSearchOptions(const HeaderSearchOptions &HSOpts,
-                               StringRef SpecificModuleCachePath,
-                               bool Complain) override;
-  bool ReadBinarySearchOptions(const BinarySearchOptions &BOpts,
                                StringRef SpecificModuleCachePath,
                                bool Complain) override;
   bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,

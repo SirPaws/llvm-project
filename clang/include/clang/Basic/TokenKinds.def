@@ -138,9 +138,6 @@ PPKEYWORD(sccs)
 PPKEYWORD(assert)
 PPKEYWORD(unassert)
 
-// WG21 P1967 | WG14 N2898 preprocessor embed
-PPKEYWORD(embed)
-
 // Clang extensions
 PPKEYWORD(__public_macro)
 PPKEYWORD(__private_macro)
@@ -697,6 +694,9 @@ KEYWORD(_Nonnull                 , KEYALL)
 KEYWORD(_Nullable                , KEYALL)
 KEYWORD(_Nullable_result         , KEYALL)
 KEYWORD(_Null_unspecified        , KEYALL)
+
+// WebAssembly Type Extension
+KEYWORD(__funcref                     , KEYALL)
 
 // N2901 Transparent Function Aliases
 KEYWORD(_Alias                   , KEYALL)
