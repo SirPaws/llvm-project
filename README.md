@@ -1,3 +1,34 @@
+this branch adds tag compatibility to clang, 
+currently enums aren't supported, but unions and structs both are more compatible.
+
+this also goes slightly outside the standard by providing tag compatibility for unnamed types
+here's an example 
+
+```c
+#define option_t(type) \
+    struct { bool has_value; type value; }
+
+option_t(int) dothing(struct { float v; } input);
+
+typedef struct { float v; } a_t;
+typedef struct { float v; } b_t;
+
+union u { int i; float f; };
+
+void example(union u);
+
+int main(void) {
+    option_t(int) value = dothing(&(struct { float v; }){0.5f});
+    a_t a = (struct { float v; }){5};
+    b_t b = (struct { float v; }){5};
+    struct { float v; } unnamed_a = (a_t){5};
+    struct { float v; } unnamed_b = (b_t){5};
+    a = b; b = a;
+
+    example((union { int i; float f; }){.i = 25});
+}
+```
+
 # The LLVM Compiler Infrastructure
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/llvm/llvm-project/badge)](https://securityscorecards.dev/viewer/?uri=github.com/llvm/llvm-project)
