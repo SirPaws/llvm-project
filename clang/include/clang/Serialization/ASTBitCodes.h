@@ -758,7 +758,7 @@ enum PreprocessorDetailRecordTypes {
 
   /// Describes an inclusion directive within the preprocessing
   /// record.
-  PPD_INCLUSION_DIRECTIVE = 2
+  PPD_INCLUSION_DIRECTIVE = 2,
 };
 
 /// Record types used within a submodule description block.
@@ -1714,6 +1714,9 @@ enum StmtCode {
 
   /// A SourceLocExpr record.
   EXPR_SOURCE_LOC,
+
+  /// A PPEmbedExpr record.
+  EXPR_BUILTIN_PP_EMBED,
 
   /// A ShuffleVectorExpr record.
   EXPR_SHUFFLE_VECTOR,

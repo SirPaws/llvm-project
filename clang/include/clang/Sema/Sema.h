@@ -2976,6 +2976,18 @@ public:
                                      MultiTemplateParamsArg TemplateParamLists,
                                      bool &AddToScope);
   bool AddOverriddenMethods(CXXRecordDecl *DC, CXXMethodDecl *MD);
+  
+  NamedDecl *ActOnOperatorBinding(
+      Scope *S, SourceLocation OperatorKeywordLoc,
+      Token OpToken, SourceLocation NameLoc,
+      IdentifierInfo &FunctionNamee);
+
+  NamedDecl *ActOnTransparentAliasDeclaration(
+      Scope *S, SourceLocation AliasLoc, bool IsWeak, SourceLocation WeakLoc,
+      IdentifierInfo &NewName, SourceLocation NewNameLoc,
+      IdentifierInfo &OldName, SourceLocation OldNameLoc,
+      const ParsedAttributesView &DeclarationAttrList,
+      const ParsedAttributesView &AliasAttrList);
 
   enum class CheckConstexprKind {
     /// Diagnose issues that are non-constant or that are extensions.
@@ -5987,6 +5999,10 @@ public:
                         ArrayRef<Expr *> Arg, SourceLocation RParenLoc,
                         Expr *Config = nullptr, bool IsExecConfig = false,
                         ADLCallKind UsesADL = ADLCallKind::NotADL);
+  /// `Fn` may be a null pointer.
+  void ModifyCallExprArguments(Expr *Fn, SourceLocation LParenLoc,
+                               SmallVectorImpl<Expr *> &ArgExprs,
+                               SourceLocation RParenLoc);
 
   ExprResult ActOnCUDAExecConfigExpr(Scope *S, SourceLocation LLLLoc,
                                      MultiExprArg ExecConfig,
@@ -6103,6 +6119,25 @@ public:
   ExprResult ActOnSourceLocExpr(SourceLocIdentKind Kind,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
+
+  // #embed
+  ExprResult ActOnPPEmbedExpr(SourceLocation BuiltinLoc,
+                              SourceLocation BinaryDataLoc,
+                              SourceLocation RPLoc, StringLiteral *Filename,
+                              StringLiteral *BinaryData);
+
+  IntegerLiteral *ExpandSinglePPEmbedExpr(PPEmbedExpr *PPEmbed,
+                                          bool FirstElement = true);
+
+  PPEmbedExpr::Action
+  CheckExprListForPPEmbedExpr(ArrayRef<Expr *> ExprList,
+                              std::optional<QualType> MaybeInitType);
+  PPEmbedExpr::Action
+  ExpandPPEmbedExprInExprList(ArrayRef<Expr *> ExprList,
+                              SmallVectorImpl<Expr *> &OutputExprList,
+                              bool ClearOutputFirst = true);
+  PPEmbedExpr::Action
+  ExpandPPEmbedExprInExprList(SmallVectorImpl<Expr *> &OutputList);
 
   // Build a potentially resolved SourceLocExpr.
   ExprResult BuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
@@ -8288,6 +8323,10 @@ public:
                                        unsigned Position,
                                        SourceLocation EqualLoc,
                                        ParsedTemplateArgument DefaultArg);
+
+  void ModifyTemplateArguments(
+      const TemplateTy &Template,
+      SmallVectorImpl<ParsedTemplateArgument> &TemplateArgs);
 
   TemplateParameterList *
   ActOnTemplateParameterList(unsigned Depth,
@@ -12589,7 +12628,7 @@ public:
   ImpCastExprToType(Expr *E, QualType Type, CastKind CK,
                     ExprValueKind VK = VK_PRValue,
                     const CXXCastPath *BasePath = nullptr,
-                    CheckedConversionKind CCK = CCK_ImplicitConversion);
+                    CheckedConversionKind CCK = CCK_ImplicitConversion, bool IsForCallExpr = false);
 
   /// ScalarTypeToBooleanCastKind - Returns the cast kind corresponding
   /// to the conversion from scalar type ScalarTy to the Boolean type.

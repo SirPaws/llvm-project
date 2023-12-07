@@ -421,6 +421,14 @@ unsigned Lexer::getSpelling(const Token &Tok, const char *&Buffer,
     }
   }
 
+  // NOTE: this is to prevent a few cases where token streams with
+  // commas are used to print with pseudo-locations after a faux-expansion
+  // cause reading a bogus location from a source file that does not exist.
+  if (Tok.is(tok::comma)) {
+    Buffer = ",";
+    return 1;
+  }
+
   // NOTE: this can be checked even after testing for an IdentifierInfo.
   if (Tok.isLiteral())
     TokStart = Tok.getLiteralData();
@@ -439,6 +447,10 @@ unsigned Lexer::getSpelling(const Token &Tok, const char *&Buffer,
 
   // If this token contains nothing interesting, return it directly.
   if (!Tok.needsCleaning()) {
+    if (Tok.is(tok::comma)) {
+      Buffer = ",";
+      return 1;
+    }
     Buffer = TokStart;
     return Tok.getLength();
   }

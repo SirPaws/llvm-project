@@ -7682,6 +7682,14 @@ public:
     return Error(E);
   }
 
+  bool VisitPPEmbedExpr(const PPEmbedExpr *E) {
+    for (const IntegerLiteral *IL : E->underlying_data_elements()) {
+      if (!StmtVisitorTy::Visit(IL))
+        return false;
+    }
+    return true;
+  }
+
   bool VisitPredefinedExpr(const PredefinedExpr *E) {
     return StmtVisitorTy::Visit(E->getFunctionName());
   }
@@ -9058,6 +9066,11 @@ public:
     APValue LValResult = E->EvaluateInContext(
         Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     Result.setFrom(Info.Ctx, LValResult);
+    return true;
+  }
+
+  bool VisitPPEmbedExpr(const PPEmbedExpr *E) {
+    llvm_unreachable("Not yet implemented for ExprConstant.cpp");
     return true;
   }
 
@@ -16021,6 +16034,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::SizeOfPackExprClass:
   case Expr::GNUNullExprClass:
   case Expr::SourceLocExprClass:
+  case Expr::PPEmbedExprClass:
     return NoDiag();
 
   case Expr::SubstNonTypeTemplateParmExprClass:

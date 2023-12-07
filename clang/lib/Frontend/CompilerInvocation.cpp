@@ -39,6 +39,7 @@
 #include "clang/Frontend/PreprocessorOutputOptions.h"
 #include "clang/Frontend/TextDiagnosticBuffer.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/BinarySearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -4365,6 +4366,9 @@ static void GeneratePreprocessorArgs(const PreprocessorOptions &Opts,
   if (Opts.SourceDateEpoch)
     GenerateArg(Consumer, OPT_source_date_epoch, Twine(*Opts.SourceDateEpoch));
 
+  for (const auto &EmbedEntry : Opts.EmbedEntries)
+    GenerateArg(Consumer, OPT_embed_dir_EQ, EmbedEntry);
+
   // Don't handle LexEditorPlaceholders. It is implied by the action that is
   // generated elsewhere.
 }
@@ -4455,6 +4459,11 @@ static bool ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
     } else {
       Opts.SourceDateEpoch = V;
     }
+  }
+
+  for (const auto *A : Args.filtered(OPT_embed_dir_EQ)) {
+    StringRef Val = A->getValue();
+    Opts.EmbedEntries.push_back(std::string(Val));
   }
 
   // Always avoid lexing editor placeholders when we're just running the

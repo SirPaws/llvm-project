@@ -1,4 +1,6 @@
-this branch adds tag compatibility to clang, 
+this branch adds tag compatibility and operator overlading (in C specifically) to clang 
+
+## Tag Compatibility
 currently enums aren't supported, but unions and structs both are more compatible.
 
 this also goes slightly outside the standard by providing tag compatibility for unnamed types
@@ -26,6 +28,28 @@ int main(void) {
     a = b; b = a;
 
     example((union { int i; float f; }){.i = 25});
+```
+## Operator Overloading
+
+operator overloading works through a new keyword to C (not C++). namely the `_Operator` keyword. which allows operator overloading in C. 
+
+The Idea wasn't mine, it was shamelessly stolen from this [tweet](https://twitter.com/__phantomderp/status/1553407797613760513)
+
+here is a short example showing how this extension works
+```c
+typedef struct vec3 { float x, y, z; } vec3;
+
+vec3 add_vector3(vec3 a, vec3 b) {
+  return (vec3){ a.x + b.x, a.y + b.y, a.z + b.z };
+}
+_Operator(+) add_vector3;
+
+int main(void) {
+  vec3 a = { 1, 2, 3};
+  vec3 b = { 4, 3, 2};
+
+  vec3 c = a + b;
+  printf("{ %f, %f, %f }\n"); // prints { 5, 5, 5 }
 }
 ```
 

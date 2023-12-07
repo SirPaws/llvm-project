@@ -404,6 +404,13 @@ void ModuleDepCollectorPP::InclusionDirective(
   handleImport(Imported);
 }
 
+void ModuleDepCollectorPP::EmbedDirective(
+    SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
+    bool IsAngled, CharSourceRange FilenameRange, const FileEntry *File,
+    StringRef SearchPath, StringRef RelativePath) {
+  MDC.FileDeps.push_back(File == nullptr ? std::string(FileName) : std::string(File->getName()));
+}
+
 void ModuleDepCollectorPP::moduleImport(SourceLocation ImportLoc,
                                         ModuleIdPath Path,
                                         const Module *Imported) {

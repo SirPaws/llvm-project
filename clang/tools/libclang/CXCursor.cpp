@@ -335,6 +335,7 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ObjCSubscriptRefExprClass:
   case Stmt::RecoveryExprClass:
   case Stmt::SYCLUniqueStableNameExprClass:
+  case Stmt::PPEmbedExprClass:
     K = CXCursor_UnexposedExpr;
     break;
 
@@ -1086,9 +1087,20 @@ CXCursor cxcursor::MakeInclusionDirectiveCursor(InclusionDirective *ID,
   return C;
 }
 
+CXCursor cxcursor::MakeEmbedDirectiveCursor(EmbedDirective *ID,
+                                                CXTranslationUnit TU) {
+  CXCursor C = {CXCursor_EmbedDirective, 0, {ID, nullptr, TU}};
+  return C;
+}
+
 const InclusionDirective *cxcursor::getCursorInclusionDirective(CXCursor C) {
   assert(C.kind == CXCursor_InclusionDirective);
   return static_cast<const InclusionDirective *>(C.data[0]);
+}
+
+const EmbedDirective *cxcursor::getCursorEmbedDirective(CXCursor C) {
+  assert(C.kind == CXCursor_EmbedDirective);
+  return static_cast<const EmbedDirective *>(C.data[0]);
 }
 
 CXCursor cxcursor::MakeCursorLabelRef(LabelStmt *Label, SourceLocation Loc,

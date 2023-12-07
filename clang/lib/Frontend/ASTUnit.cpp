@@ -851,8 +851,8 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
 
   unsigned Counter = 0;
   AST->Reader->setListener(std::make_unique<ASTInfoCollector>(
-      *AST->PP, AST->Ctx.get(), *AST->HSOpts, *AST->PPOpts, *AST->LangOpts,
-      AST->TargetOpts, AST->Target, Counter));
+      *AST->PP, AST->Ctx.get(), *AST->HSOpts, *AST->PPOpts,
+      *AST->LangOpts, AST->TargetOpts, AST->Target, Counter));
 
   // Attach the AST reader to the AST context as an external AST
   // source, so that declarations will be deserialized from the

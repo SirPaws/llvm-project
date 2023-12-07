@@ -972,6 +972,9 @@ Parser::ParseExternalDeclaration(ParsedAttributes &Attrs,
   case tok::kw_template:
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
+  case tok::kw__Operator:
+  case tok::kw__Alias:
+  case tok::kw__Weak:
     // A function definition cannot start with any of these keywords.
     {
       SourceLocation DeclEnd;

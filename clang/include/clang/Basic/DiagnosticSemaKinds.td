@@ -640,6 +640,17 @@ def err_using_enum_decl_redeclaration : Error<
   "redeclaration of using-enum declaration">;
 def note_using_enum_decl : Note<"%select{|previous }0using-enum declaration">;
 
+def err_transparent_alias_bad_target : Error<
+  "%0 is not a valid transparent alias target">;
+def err_transparent_alias_cannot_redeclare : Error<
+  "%0 cannot be redeclared as a transparent alias because it already exists "
+  "as a %select{function declaration|variable declaration}1">;
+def err_transparent_alias_bad_redeclaration : Error<
+  "redeclaration of transparent alias %0 does not resolve to the same entity "
+  "as the previous declaration %1; expected %2">;
+def err_transparent_alias_redeclaration_to_non_alias : Error<
+  "%0 cannot be redeclared as it is already a transparent alias">;
+
 def warn_access_decl_deprecated : Warning<
   "access declarations are deprecated; use using declarations instead">,
   InGroup<Deprecated>;
@@ -1070,8 +1081,6 @@ def note_surrounding_namespace_starts_here : Note<
   "surrounding namespace with visibility attribute starts here">;
 def err_pragma_loop_invalid_argument_type : Error<
   "invalid argument of type %0; expected an integer type">;
-def err_pragma_loop_invalid_argument_value : Error<
-  "%select{invalid value '%0'; must be positive|value '%0' is too large}1">;
 def err_pragma_loop_compatibility : Error<
   "%select{incompatible|duplicate}0 directives '%1' and '%2'">;
 def err_pragma_loop_precedes_nonloop : Error<
@@ -8132,6 +8141,13 @@ def err_return_in_captured_stmt : Error<
 def err_capture_block_variable : Error<
   "__block variable %0 cannot be captured in a "
   "%select{lambda expression|captured statement}1">;
+
+def err_operator_binding_arg_not_function : Error<
+    "'_Operator' argument %0 is not a function">;
+def err_operator_binding_invalid_binary_op : Error<
+    "'_Operator' types do not match the types of the functions arguments">;
+def err_operator_binding_type_mismatch : Error<
+    "token is not a valid binary operator">;
 
 def err_operator_arrow_circular : Error<
   "circular pointer delegation detected">;

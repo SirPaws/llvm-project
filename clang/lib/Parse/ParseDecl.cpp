@@ -1892,6 +1892,7 @@ void Parser::stripTypeAttributesOffDeclSpec(ParsedAttributes &Attrs,
 ///       declaration: [C99 6.7]
 ///         block-declaration ->
 ///           simple-declaration
+/// [C:N2901] alias-declaration
 ///           others                   [FIXME]
 /// [C++]   template-declaration
 /// [C++]   namespace-definition
@@ -1909,6 +1910,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
   // Must temporarily exit the objective-c container scope for
   // parsing c none objective-c decls.
   ObjCDeclContextSwitch ObjCDC(*this);
+  ParsedAttributes Attrs(AttrFactory);
 
   Decl *SingleDecl = nullptr;
   switch (Tok.getKind()) {
@@ -1939,11 +1941,17 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
     ProhibitAttributes(DeclSpecAttrs);
     return ParseNamespace(Context, DeclEnd);
   case tok::kw_using: {
-    ParsedAttributes Attrs(AttrFactory);
     takeAndConcatenateAttrs(DeclAttrs, DeclSpecAttrs, Attrs);
     return ParseUsingDirectiveOrDeclaration(Context, ParsedTemplateInfo(),
                                             DeclEnd, Attrs);
-  }
+    }
+  case tok::kw__Operator:
+    SingleDecl = ParseOperatorBinding(Context, DeclEnd);
+    break;
+  case tok::kw__Alias:
+  case tok::kw__Weak:
+    SingleDecl = ParseTransparentAlias(Context, DeclEnd, Attrs);
+    break;
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
     ProhibitAttributes(DeclAttrs);
@@ -1958,6 +1966,132 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
   // This routine returns a DeclGroup, if the thing we parsed only contains a
   // single decl, convert it now.
   return Actions.ConvertDeclToDeclGroup(SingleDecl);
+}
+
+/// This routine covers the _Operator declarations,
+/// operator overloading in C
+/// declaration, which should match the behavior we want.
+///   operator-binding-declaration:
+///     '_Operator' '(' bindable-operator ')' identifier 
+///   bindable-operator:
+///     [any of] + - * / % ^ & | ~ ! < > << >> == != <= >= && ||
+Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &DeclEnd) {
+  const LangOptions &LangOpts = getLangOpts();
+  bool IsCOnly =
+      (LangOpts.C99 || LangOpts.C11 || LangOpts.C23 || LangOpts.C17) &&
+      !(LangOpts.CPlusPlus);
+  if (!IsCOnly) {
+    Diag(diag::err_type_unsupported) << "_Operator (C only)";
+    return nullptr;
+  }
+  SourceLocation OperatorLoc = Tok.getLocation();
+  if (ExpectAndConsume(tok::kw__Operator)) {
+    return nullptr;
+  }
+  BalancedDelimiterTracker T(*this, tok::l_paren);
+  if (T.consumeOpen()) {
+    Diag(Tok, diag::err_expected) << tok::l_paren;
+    SkipMalformedDecl();
+    return nullptr;
+  }
+
+  Token OpToken = Tok;
+
+  if (!OpToken.isOneOf(
+      tok::plus, tok::minus, tok::star, tok::slash, tok::percent,
+      tok::caret, tok::amp, tok::pipe, tok::tilde, tok::exclaim,
+      tok::less, tok::greater, tok::lessless, tok::greatergreater,
+      tok::equalequal, tok::exclaimequal, tok::lessequal,
+      tok::greaterequal, tok::ampamp, tok::pipepipe)) {
+    Diag(diag::err_type_unsupported) << "token is not an overloadable operator\n"
+             "the supported operators are: "
+        "'+', '-', '*', '/', '%', '^', '&', '|', '~', '!', '<', '>', '<<', '>>', '==', '!=', '<=', '>=', '&&', '||'"
+        ;
+    return nullptr;
+  }
+  ConsumeToken();
+
+  Token IdentifierToken = Tok;
+  if (expectIdentifier()) {
+    Diag(Tok, diag::err_expected) << tok::identifier;
+    SkipMalformedDecl();
+    return nullptr;
+  }
+  ConsumeToken();
+  if (T.consumeClose()) {
+    Diag(Tok, diag::err_expected) << tok::l_paren;
+    SkipMalformedDecl();
+    return nullptr;
+  }
+
+  DeclEnd = Tok.getLocation();
+  if (ExpectAndConsumeSemi(diag::err_expected)) {
+    return nullptr;
+  }
+  SourceLocation IdentifierLocation = IdentifierToken.getLocation();
+  IdentifierInfo *Identifier = IdentifierToken.getIdentifierInfo();
+
+  return Actions.ActOnOperatorBinding(getCurScope(), OperatorLoc, OpToken,
+                                      IdentifierLocation, *Identifier);
+}
+
+/// This routine covers the _Alias declarations in N2901,
+/// Transparent Function Aliases. Internally, we treat it as effectively a
+/// function declaration the first identifier, set with an AsmLabel of the
+/// second identifier. Attributes are applied to the newly created function
+/// declaration, which should match the behavior we want.
+///   alias-declaration:
+///     '_Alias' alias-specifier[opt] identifier
+///       attribute-specifier-seq[opt] '=' identifier ';'
+///   alias-specifier:
+///     '(weak)'
+Decl*
+Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd,
+                         ParsedAttributes &attrs) {
+  const LangOptions &LangOpts = getLangOpts();
+  bool IsCOnly =
+      (LangOpts.C99 || LangOpts.C11 || LangOpts.C23 || LangOpts.C17) &&
+      !(LangOpts.CPlusPlus);
+  if (!IsCOnly) {
+    Diag(diag::err_type_unsupported) << "_Alias (C only)";
+    return nullptr;
+  }
+  bool IsWeak = false;
+  SourceLocation WeakLoc;
+  if (Tok.is(tok::kw__Weak)) {
+    IsWeak = true;
+    WeakLoc = Tok.getLocation();
+    ConsumeToken();
+  }
+  SourceLocation AliasLoc = Tok.getLocation();
+  if (ExpectAndConsume(tok::kw__Alias)) {
+    return nullptr;
+  }
+  if (expectIdentifier()) {
+    return nullptr;
+  }
+  IdentifierInfo &NewAlias = *Tok.getIdentifierInfo();
+  SourceLocation NewAliasLoc = Tok.getLocation();
+  ConsumeToken();
+  
+  ParsedAttributes AttrsOnAlias(AttrFactory);
+  MaybeParseCXX11Attributes(AttrsOnAlias);
+  if (ExpectAndConsume(tok::equal)) {
+    return nullptr;
+  }
+  if (expectIdentifier()) {
+    return nullptr;
+  }
+  IdentifierInfo &OldAlias = *Tok.getIdentifierInfo();
+  SourceLocation OldAliasLoc = Tok.getLocation();
+  ConsumeToken();
+  DeclEnd = Tok.getLocation();
+  if (ExpectAndConsumeSemi(diag::err_expected)) {
+    return nullptr;
+  }
+  return Actions.ActOnTransparentAliasDeclaration(
+      getCurScope(), AliasLoc, IsWeak, WeakLoc, NewAlias, NewAliasLoc, OldAlias, OldAliasLoc,
+      attrs, AttrsOnAlias);
 }
 
 ///       simple-declaration: [C99 6.7: declaration] [C++ 7p1: dcl.dcl]
@@ -5750,6 +5884,10 @@ bool Parser::isDeclarationSpecifier(
 
     // GNU attributes.
   case tok::kw___attribute:
+
+    // N2901 _Alias
+  case tok::kw__Alias:
+  case tok::kw__Weak:
 
     // C++11 decltype and constexpr.
   case tok::annot_decltype:

@@ -29,8 +29,10 @@
 #include "clang/Lex/ModuleLoader.h"
 #include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/PPCallbacks.h"
+#include "clang/Lex/PPEmbedParameters.h"
 #include "clang/Lex/Token.h"
 #include "clang/Lex/TokenLexer.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
@@ -53,6 +55,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace llvm {
@@ -63,6 +66,7 @@ template<unsigned InternalLen> class SmallString;
 
 namespace clang {
 
+class BinarySearchOptions;
 class CodeCompletionHandler;
 class CommentHandler;
 class DirectoryEntry;
@@ -119,6 +123,13 @@ enum MacroUse {
   MU_Undef  = 2
 };
 
+enum class EmbedResult {
+  Invalid = -1, // Parsing error occurred.
+  NotFound = 0, // Corresponds to __STDC_EMBED_NOT_FOUND__
+  Found = 1,    // Corresponds to __STDC_EMBED_FOUND__
+  Empty = 2,    // Corresponds to __STDC_EMBED_EMPTY__
+};
+
 /// Engages in a tight little dance with the lexer to efficiently
 /// preprocess tokens.
 ///
@@ -165,6 +176,7 @@ class Preprocessor {
   IdentifierInfo *Ident__has_builtin;              // __has_builtin
   IdentifierInfo *Ident__has_constexpr_builtin;    // __has_constexpr_builtin
   IdentifierInfo *Ident__has_attribute;            // __has_attribute
+  IdentifierInfo *Ident__has_embed;                // __has_embed
   IdentifierInfo *Ident__has_include;              // __has_include
   IdentifierInfo *Ident__has_include_next;         // __has_include_next
   IdentifierInfo *Ident__has_warning;              // __has_warning
@@ -206,7 +218,7 @@ class Preprocessor {
 
   enum {
     /// Maximum depth of \#includes.
-    MaxAllowedIncludeStackDepth = 200
+    MaxAllowedIncludeStackDepth = 200,
   };
 
   // State that is set before the preprocessor begins.
@@ -1723,6 +1735,10 @@ public:
   /// Lex a token, forming a header-name token if possible.
   bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
 
+  /// Lex the parameters for an #embed directive, returns nullopt on error.
+  std::optional<LexEmbedParametersResult> LexEmbedParameters(Token &Current,
+                                                             bool ForHasEmbed);
+
   bool LexAfterModuleImport(Token &Result);
   void CollectPpImportSuffix(SmallVectorImpl<Token> &Toks);
 
@@ -2303,7 +2319,13 @@ public:
 
   /// Read and discard all tokens remaining on the current line until
   /// the tok::eod token is found. Returns the range of the skipped tokens.
-  SourceRange DiscardUntilEndOfDirective();
+  SourceRange DiscardUntilEndOfDirective() {
+    Token Tmp;
+    return DiscardUntilEndOfDirective(Tmp);
+  }
+
+  /// Same as above except retains the token that was found.
+  SourceRange DiscardUntilEndOfDirective(Token &Tok);
 
   /// Returns true if the preprocessor has seen a use of
   /// __DATE__ or __TIME__ in the file so far.
@@ -2407,6 +2429,14 @@ public:
              ModuleMap::KnownHeader *SuggestedModule, bool *IsMapped,
              bool *IsFrameworkFound, bool SkipCache = false,
              bool OpenFile = true, bool CacheFailures = true);
+
+  /// Given a "foo" or \<foo> reference, look up the indicated embed resource.
+  ///
+  /// Returns std::nullopt on failure.  \p isAngled indicates whether the file
+  /// reference is for system \#include's or not (i.e. using <> instead of "").
+  OptionalFileEntryRef
+  LookupEmbedFile(StringRef Filename, bool isAngled, bool OpenFile,
+                  const FileEntry *LookupFromFile = nullptr);
 
   /// Return true if we're in the top-level file, not in a \#include.
   bool isInPrimaryFile() const;
@@ -2513,6 +2543,9 @@ private:
   /// Information about the result for evaluating an expression for a
   /// preprocessor directive.
   struct DirectiveEvalResult {
+    /// The integral value of the expression.
+    std::optional<llvm::APSInt> Value;
+
     /// Whether the expression was evaluated as true or not.
     bool Conditional;
 
@@ -2527,7 +2560,22 @@ private:
   /// \#if or \#elif directive and return a \p DirectiveEvalResult object.
   ///
   /// If the expression is equivalent to "!defined(X)" return X in IfNDefMacro.
-  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro);
+  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                                  bool CheckForEoD = true);
+
+  /// Evaluate an integer constant expression that may occur after a
+  /// \#if or \#elif directive and return a \p DirectiveEvalResult object.
+  ///
+  /// If the expression is equivalent to "!defined(X)" return X in IfNDefMacro.
+  DirectiveEvalResult EvaluateDirectiveExpression(IdentifierInfo *&IfNDefMacro,
+                                                  Token &Tok,
+                                                  bool CheckForEoD = true);
+
+  /// Process a '__has_embed("path" [, ...])' expression.
+  ///
+  /// Returns predefined `__STDC_EMBED_*` macro values if
+  /// successful.
+  EmbedResult EvaluateHasEmbed(Token &Tok, IdentifierInfo *II);
 
   /// Process a '__has_include("path")' expression.
   ///
@@ -2675,6 +2723,13 @@ private:
       const FileEntry *LookupFromFile, StringRef &LookupFilename,
       SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
       ModuleMap::KnownHeader &SuggestedModule, bool isAngled);
+  // Binary data inclusion
+  void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok,
+                            const FileEntry *LookupFromFile = nullptr);
+  void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
+                                StringRef ResolvedFilename,
+                                const LexEmbedParametersResult &Params,
+                                StringRef BinaryContents);
 
   // File inclusion.
   void HandleIncludeDirective(SourceLocation HashLoc, Token &Tok,
@@ -2936,6 +2991,13 @@ public:
 
   // The handler handles empty lines.
   virtual void HandleEmptyline(SourceRange Range) = 0;
+};
+
+/// Helper class to shuttle information about #embed directives from the
+/// preprocessor to the parser through an annotation token.
+struct EmbedAnnotationData {
+  llvm::SmallString<32> FileName;
+  StringRef BinaryData;
 };
 
 /// Registry of pragma handlers added by plugins
