@@ -9997,6 +9997,12 @@ checkPointerTypesForAssignment(Sema &S, QualType LHSType, QualType RHSType,
     // General pointer incompatibility takes priority over qualifiers.
     if (RHSType->isFunctionPointerType() && LHSType->isFunctionPointerType())
       return Sema::IncompatibleFunctionPointer;
+    if (S.getLangOpts().C23) {
+      auto GetDecl = [](const Type *Type){ return Type->getAs<RecordType>()->getDecl(); };
+      if (isa<RecordType>(lhptee) && isa<RecordType>(rhptee) && S.hasStructuralCompatLayout(GetDecl(lhptee), GetDecl(rhptee))) {
+        return ConvTy;
+      }
+    }
     return Sema::IncompatiblePointer;
   }
   if (!S.getLangOpts().CPlusPlus &&
@@ -10488,6 +10494,19 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
 
   // struct A -> struct B
   if (isa<TagType>(LHSType) && isa<TagType>(RHSType)) {
+    
+    if (getLangOpts().C23) {
+      TagDecl *LHSDecl = LHSType->getAs<TagType>()->getDecl();
+      TagDecl *RHSDecl = RHSType->getAs<TagType>()->getDecl();
+      if (!LHSDecl->hasNameForLinkage() && hasStructuralCompatLayout(LHSDecl, RHSDecl)) {
+        Kind = CK_NoOp;
+        return Compatible;
+      } else if (LHSDecl->hasNameForLinkage() && !RHSDecl->hasNameForLinkage() &&
+          hasStructuralCompatLayout(LHSDecl, RHSDecl)) {
+        Kind = CK_NoOp;
+        return Compatible;
+      }
+    }
     if (Context.typesAreCompatible(LHSType, RHSType)) {
       Kind = CK_NoOp;
       return Compatible;

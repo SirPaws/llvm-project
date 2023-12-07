@@ -1512,7 +1512,22 @@ static bool NameIsStructurallyEquivalent(const TagDecl &D1, const TagDecl &D2) {
 /// Determine structural equivalence of two records.
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      RecordDecl *D1, RecordDecl *D2) {
-  if (!NameIsStructurallyEquivalent(*D1, *D2)) {
+  bool IsC23 = Context.FromCtx.getLangOpts().C23;
+  if (IsC23) {
+    auto GetName = [](const TagDecl &D) -> const IdentifierInfo * {
+      if (const IdentifierInfo *Name = D.getIdentifier())
+        return Name;
+      if (const TypedefNameDecl *TypedefName = D.getTypedefNameForAnonDecl())
+        return TypedefName->getIdentifier();
+      return nullptr;
+    };
+
+    const IdentifierInfo *D1Name = GetName(*D1);
+    const IdentifierInfo *D2Name = GetName(*D2);
+    if ((D1Name && D2Name) && !IsStructurallyEquivalent(D1Name, D2Name)) {
+      return false;
+    }
+  } else if (!NameIsStructurallyEquivalent(*D1, *D2)) {
     return false;
   }
 
