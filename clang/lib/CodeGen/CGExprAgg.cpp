@@ -21,6 +21,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/AST/ASTStructuralEquivalence.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -877,9 +878,23 @@ void AggExprEmitter::VisitCastExpr(CastExpr *E) {
   case CK_NoOp:
   case CK_UserDefinedConversion:
   case CK_ConstructorConversion:
-    assert(CGF.getContext().hasSameUnqualifiedType(E->getSubExpr()->getType(),
-                                                   E->getType()) &&
-           "Implicit cast types must be compatible");
+    if (CGF.getLangOpts().C23) {
+      ASTContext &Context = CGF.getContext();
+      llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls;
+
+      StructuralEquivalenceContext Ctx(
+          Context, Context, NonEquivalentDecls,
+          StructuralEquivalenceKind::Default, false /*StrictTypeSpelling*/,
+          false /*Complain*/, true /*ErrorOnTagTypeMismatch*/);
+
+      assert(Ctx.IsEquivalent(E->getSubExpr()->getType(), E->getType()) ||
+              Context.hasSameUnqualifiedType(E->getSubExpr()->getType(),
+                                             E->getType()) &&  "Implicit cast types must be compatible");
+    } else {
+      assert(CGF.getContext().hasSameUnqualifiedType(E->getSubExpr()->getType(),
+                                                     E->getType()) &&
+             "Implicit cast types must be compatible");
+    }
     Visit(E->getSubExpr());
     break;
 

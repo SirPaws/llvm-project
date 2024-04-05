@@ -9934,6 +9934,64 @@ OverloadedOperatorKind GetOperatorBindingKind(Token OpToken) {
   }
 }
 
+bool IsOperatorOverloadFunctionValid(ASTContext& Context, FunctionDecl *FnDecl, OverloadedOperatorKind OperatorKind) {
+  auto NumParam = FnDecl->getNumParams(); 
+  switch (NumParam) {
+    case 1: 
+      switch (OperatorKind) {
+        case OverloadedOperatorKind::OO_Plus:
+        case OverloadedOperatorKind::OO_Minus:
+        case OverloadedOperatorKind::OO_Star:
+        case OverloadedOperatorKind::OO_Tilde:
+        case OverloadedOperatorKind::OO_Exclaim:
+                 break;
+        default: return false;
+      } break;
+    case 2: 
+      switch (OperatorKind) {
+        case OverloadedOperatorKind::OO_Plus:
+        case OverloadedOperatorKind::OO_Minus:
+        case OverloadedOperatorKind::OO_Star:
+        case OverloadedOperatorKind::OO_Slash:
+        case OverloadedOperatorKind::OO_Percent:
+        case OverloadedOperatorKind::OO_Caret:
+        case OverloadedOperatorKind::OO_Amp:
+        case OverloadedOperatorKind::OO_Pipe:
+        case OverloadedOperatorKind::OO_Less:
+        case OverloadedOperatorKind::OO_Greater:
+        case OverloadedOperatorKind::OO_LessLess:
+        case OverloadedOperatorKind::OO_GreaterGreater:
+        case OverloadedOperatorKind::OO_EqualEqual:
+        case OverloadedOperatorKind::OO_ExclaimEqual:
+        case OverloadedOperatorKind::OO_LessEqual:
+        case OverloadedOperatorKind::OO_GreaterEqual:
+        case OverloadedOperatorKind::OO_AmpAmp:
+        case OverloadedOperatorKind::OO_PipePipe:
+                 break;
+        default: return false;
+      } break;
+    default: case 0: return false;
+  }
+
+  auto GetParamType = [&FnDecl, &Context](unsigned int n) {
+    return FnDecl->getParamDecl(n)->getType().getDesugaredType(Context);
+  };
+
+  bool FirstParamIsRecord = isa<RecordType>(GetParamType(0));
+  if (!FirstParamIsRecord && NumParam == 1) {
+    return false;
+  }
+
+  if (NumParam == 2 && !isa<RecordType>(GetParamType(1))) {
+    if (!FirstParamIsRecord) return false;
+    if (!(isa<BuiltinType>(GetParamType(1)) || isa<EnumType>(GetParamType(1)))) return false;
+  } else if (NumParam == 2 && !FirstParamIsRecord) {
+    if (!(isa<BuiltinType>(GetParamType(0)) || isa<EnumType>(GetParamType(0)))) return false;
+  }
+
+  return true;
+}
+
 NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken,
                                       SourceLocation NameLoc, IdentifierInfo &FunctionName) {
   DeclarationName DeclName(&FunctionName);
@@ -9947,28 +10005,14 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
 
   NamedDecl *FoundDecl = NameLookup.getFoundDecl();
   if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
-    auto NumParam = FnDecl->getNumParams(); 
-    if (NumParam < 1 || NumParam > 2) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
-      return nullptr;
-    }
-    auto GetParamType = [&FnDecl](unsigned int n) {
-      return FnDecl->getParamDecl(0)->getType();
-    };
-
-    if (!isa<RecordType>(GetParamType(0)) && NumParam == 1) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
-      return nullptr;
-    }
-    
-    if (NumParam == 2 && !isa<RecordType>(GetParamType(1))) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
-      return nullptr;
-    }
-    
     OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
     if (OperatorKind == OverloadedOperatorKind::OO_None) {
       Diag(OpToken.getLocation(), diag::err_operator_binding_invalid_binary_op);
+      return nullptr;
+    }
+
+    if (!IsOperatorOverloadFunctionValid(Context, FnDecl, OperatorKind)) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
       return nullptr;
     }
 

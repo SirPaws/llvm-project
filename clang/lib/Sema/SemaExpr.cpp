@@ -4147,7 +4147,7 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
     QualType Ty;
 
     // 'z/uz' literals are a C++23 feature.
-    if (Literal.isSizeT)
+    if (Literal.isSizeT && !getLangOpts().C23)
       Diag(Tok.getLocation(), getLangOpts().CPlusPlus
                                   ? getLangOpts().CPlusPlus23
                                         ? diag::warn_cxx20_compat_size_t_suffix

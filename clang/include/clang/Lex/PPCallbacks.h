@@ -27,6 +27,7 @@ class IdentifierInfo;
 class MacroDefinition;
 class MacroDirective;
 class MacroArgs;
+struct LexEmbedParametersResult;
 
 /// This interface provides a way to observe the actions of the
 /// preprocessor as it does its thing.

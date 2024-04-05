@@ -7506,8 +7506,9 @@ void ASTReader::CompleteRedeclChain(const Decl *D) {
         // the identifier instead. (For C++ modules, we don't store decls
         // in the serialized identifier table, so we do the lookup in the TU.)
         auto *II = Name.getAsIdentifierInfo();
-        assert(II && "non-identifier name in C?");
-        if (II->isOutOfDate())
+        
+        // assert(II && "non-identifier name in C?");
+        if (II && II->isOutOfDate())
           updateOutOfDateIdentifier(*II);
       } else
         DC->lookup(Name);

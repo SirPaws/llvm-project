@@ -1,4 +1,7 @@
-this branch adds tag compatibility and operator overlading (in C specifically) to clang 
+Don't use this branch, this is my fuck around and find out branch.
+
+Currently this branch adds tag compatibility and operator overlading (in C specifically) to clang,
+but other things might be added in the future
 
 ## Tag Compatibility
 currently enums aren't supported, but unions and structs both are more compatible.

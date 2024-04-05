@@ -2011,6 +2011,12 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
   }
   ConsumeToken();
 
+  if (T.consumeClose()) {
+    Diag(Tok, diag::err_expected) << tok::l_paren;
+    SkipMalformedDecl();
+    return nullptr;
+  }
+
   Token IdentifierToken = Tok;
   if (expectIdentifier()) {
     Diag(Tok, diag::err_expected) << tok::identifier;
@@ -2018,11 +2024,6 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
     return nullptr;
   }
   ConsumeToken();
-  if (T.consumeClose()) {
-    Diag(Tok, diag::err_expected) << tok::l_paren;
-    SkipMalformedDecl();
-    return nullptr;
-  }
 
   DeclEnd = Tok.getLocation();
   if (ExpectAndConsumeSemi(diag::err_expected)) {
