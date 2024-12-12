@@ -1,8 +1,28 @@
+this branch adds a new keyword to C (not C++). namely the `_Operator` keyword. which allows operator overloading in C. 
+
+The Idea wasn't mine, it was shamelessly stolen from this [tweet](https://twitter.com/__phantomderp/status/1553407797613760513)
+
+here is a short example showing how this extension works
+```c
+typedef struct vec3 { float x, y, z; } vec3;
+
+vec3 add_vector3(vec3 a, vec3 b) {
+  return (vec3){ a.x + b.x, a.y + b.y, a.z + b.z };
+}
+_Operator(+, vec3, vec3, add_vector3);
+
+int main(void) {
+  vec3 a = { 1, 2, 3};
+  vec3 b = { 4, 3, 2};
+
+  vec3 c = a + b;
+  printf("{ %f, %f, %f }\n"); // prints { 5, 5, 5 }
+}
+```
+
 # The LLVM Compiler Infrastructure
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/llvm/llvm-project/badge)](https://securityscorecards.dev/viewer/?uri=github.com/llvm/llvm-project)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8273/badge)](https://www.bestpractices.dev/projects/8273)
-[![libc++](https://github.com/llvm/llvm-project/actions/workflows/libcxx-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/llvm/llvm-project/actions/workflows/libcxx-build-and-test.yaml?query=event%3Aschedule)
 
 Welcome to the LLVM project!
 
@@ -16,7 +36,7 @@ files needed to process intermediate representations and convert them into
 object files. Tools include an assembler, disassembler, bitcode analyzer, and
 bitcode optimizer.
 
-C-like languages use the [Clang](https://clang.llvm.org/) frontend. This
+C-like languages use the [Clang](http://clang.llvm.org/) frontend. This
 component compiles C, C++, Objective-C, and Objective-C++ code into LLVM bitcode
 -- and from there into object files, using LLVM.
 
