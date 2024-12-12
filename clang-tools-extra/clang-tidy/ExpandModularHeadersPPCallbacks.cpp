@@ -95,7 +95,8 @@ ExpandModularHeadersPPCallbacks::ExpandModularHeadersPPCallbacks(
   auto PO = std::make_shared<PreprocessorOptions>();
   *PO = Compiler.getPreprocessorOpts();
 
-  PP = std::make_unique<clang::Preprocessor>(PO, Diags, LangOpts, Sources,
+  PP = std::make_unique<clang::Preprocessor>(PO, Diags, LangOpts,
+                                              BinarySearchOptions(), Sources,
                                               *HeaderInfo, ModuleLoader,
                                               /*IILookup=*/nullptr,
                                               /*OwnsHeaderSearch=*/false);
