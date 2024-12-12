@@ -3307,6 +3307,12 @@ private:
                             SourceLocation UsingLoc,
                             SourceLocation &DeclEnd,
                             ParsedAttributes &attrs);
+  Decl *ParseTransparentAlias(DeclaratorContext Context,
+                              SourceLocation &DeclEnd,
+                              ParsedAttributesWithRange &attrs);
+
+  Decl *ParseOperatorBinding(DeclaratorContext Context,
+                              SourceLocation &DeclEnd);
 
   struct UsingDeclarator {
     SourceLocation TypenameLoc;

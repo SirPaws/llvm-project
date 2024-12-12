@@ -9745,6 +9745,324 @@ static Scope *getTagInjectionScope(Scope *S, const LangOptions &LangOpts) {
   return S;
 }
 
+/// Find the Transparent Function Alias, optionally the most derived one.
+static bool lookupMaybeTransparentAliasDecl(
+    NamedDecl **DeclOut, bool *IsTransparentAliasOut, bool *IsWeak, int* SucessfulLookupsOut,
+    Sema &SemaRef, Scope *CurScope, DeclarationName NameDN,
+    SourceLocation NameLoc, const LangOptions &, bool MostDerived = false) {
+  *DeclOut = nullptr;
+  *IsTransparentAliasOut = false;
+  *IsWeak = false;
+  *SucessfulLookupsOut = 0;
+  LookupResult NewNameLookup(SemaRef, NameDN, NameLoc,
+                             Sema::LookupOrdinaryName);
+  if (!SemaRef.LookupName(NewNameLookup, CurScope)) {
+    return false;
+  }
+  // we found something. Need to check if it's compatible/overridable?
+  NamedDecl *FoundDecl = NewNameLookup.getFoundDecl();
+  *DeclOut = FoundDecl;
+  if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
+    *SucessfulLookupsOut += 1;
+    if (TransparentAliasAttr *TAAttr =
+            FnDecl->getAttr<TransparentAliasAttr>()) {
+      *IsWeak = TAAttr->getIsWeak();
+      *IsTransparentAliasOut = true;
+      if (MostDerived) {
+       *DeclOut = TAAttr->getTargetDecl();
+        *IsTransparentAliasOut = false;
+        *IsWeak = false;
+      }
+    } else {
+      *IsWeak = false;
+      *IsTransparentAliasOut = false;
+    }
+  }
+  return *DeclOut != nullptr && *SucessfulLookupsOut > 0;
+}
+
+OverloadedOperatorKind GetOperatorBindingKind(Token OpToken) {
+  switch (OpToken.getKind()) {
+  case tok::plus:
+    return OverloadedOperatorKind::OO_Plus;
+  case tok::minus:
+    return OverloadedOperatorKind::OO_Minus;
+  case tok::star:
+    return OverloadedOperatorKind::OO_Star;
+  case tok::slash:
+    return OverloadedOperatorKind::OO_Slash;
+  case tok::percent:
+    return OverloadedOperatorKind::OO_Percent;
+  case tok::caret:
+    return OverloadedOperatorKind::OO_Caret;
+  case tok::amp:
+    return OverloadedOperatorKind::OO_Amp;
+  case tok::pipe:
+    return OverloadedOperatorKind::OO_Pipe;
+  case tok::less:
+    return OverloadedOperatorKind::OO_Less;
+  case tok::greater:
+    return OverloadedOperatorKind::OO_Greater;
+  case tok::lessless:
+    return OverloadedOperatorKind::OO_LessLess;
+  case tok::greatergreater:
+    return OverloadedOperatorKind::OO_GreaterGreater;
+  case tok::equalequal:
+    return OverloadedOperatorKind::OO_EqualEqual;
+  case tok::exclaimequal:
+    return OverloadedOperatorKind::OO_ExclaimEqual;
+  case tok::lessequal:
+    return OverloadedOperatorKind::OO_LessEqual;
+  case tok::greaterequal:
+    return OverloadedOperatorKind::OO_GreaterEqual;
+  case tok::ampamp:
+    return OverloadedOperatorKind::OO_AmpAmp;
+  case tok::pipepipe:
+    return OverloadedOperatorKind::OO_PipePipe;
+  case tok::tilde:
+    return OverloadedOperatorKind::OO_Tilde;
+  case tok::exclaim:
+    return OverloadedOperatorKind::OO_Exclaim;
+  default:
+    return OverloadedOperatorKind::OO_None;
+  }
+}
+
+NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken, unsigned int NumTypes,
+                                      TypeResult &FirstType,
+                                      TypeResult &SecondType,
+                                      SourceLocation NameLoc,
+                                      IdentifierInfo &FunctionName) {
+  DeclarationName DeclName(&FunctionName);
+  LookupResult NameLookup(*this, DeclName, NameLoc,
+                          Sema::LookupOrdinaryName);
+
+  if (!LookupName(NameLookup, S)) {
+    Diag(NameLoc, diag::err_undeclared_var_use) << &FunctionName;
+    return nullptr;
+  }
+
+  NamedDecl *FoundDecl = NameLookup.getFoundDecl();
+  if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
+    if (FnDecl->getNumParams() != NumTypes) {
+        return nullptr;
+    }
+    auto GetType = [](auto Ast) {
+        if constexpr (std::is_convertible_v < decltype(Ast), ParmVarDecl *>) {
+          return Ast->getType();
+        } else {
+          return Ast.get();
+        }
+    };
+    auto isSameType = [GetType](ASTContext& Context, ParsedType& Type, ParmVarDecl *ParameterType) {
+      QualType QualifiedType = GetType(Type);
+      QualType CanonicalType = QualifiedType.getCanonicalType();
+
+      QualType QualifiedParamterType = GetType(ParameterType);
+      QualType CanonicalParamterType = QualifiedType.getCanonicalType();
+      return Context.hasSameUnqualifiedType(CanonicalType, CanonicalParamterType)
+          && (QualifiedParamterType.getQualifiers() ==
+                 QualifiedType.getQualifiers());
+    };
+
+    if (!isSameType(Context, FirstType.get(), FnDecl->getParamDecl(0))) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+      return nullptr;
+    }
+
+    if (NumTypes == 2) {
+      if (!isSameType(Context, SecondType.get(), FnDecl->getParamDecl(1))) {
+        Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+        return nullptr;
+      }
+    }
+
+       
+      OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
+    if (OperatorKind == OverloadedOperatorKind::OO_None) {
+      Diag(OpToken.getLocation(), diag::err_operator_binding_invalid_binary_op);
+      return nullptr;
+    }
+
+    DeclContext *DC = CurScope->getEntity();
+    unsigned SymbolIdx = 0;
+    SourceLocation SymbolLocations[3]{OpToken.getLocation()};
+
+    UnqualifiedId Id;
+    Id.setOperatorFunctionId(OperatorKeywordLoc, OperatorKind, 
+                             SymbolLocations);
+    DeclarationNameInfo NameInfo = GetNameFromUnqualifiedId(Id);
+
+    FunctionDecl *NewDecl = FunctionDecl::Create(
+        Context, DC, OperatorKeywordLoc, NameLoc, NameInfo.getName(),
+        FnDecl->getType(),
+        nullptr,
+        SC_Static, false, false, FnDecl->hasWrittenPrototype(),
+        FnDecl->getConstexprKind(), nullptr);
+    if (const FunctionProtoType *FT =
+            dyn_cast<FunctionProtoType>(FnDecl->getType())) {
+      SmallVector<ParmVarDecl *, 16> Params;
+      for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
+        ParmVarDecl *parm = ParmVarDecl::Create(
+            Context, NewDecl, SourceLocation(), SourceLocation(), nullptr,
+            FT->getParamType(i), /*TInfo=*/nullptr, SC_None, nullptr);
+        parm->setScopeInfo(0, i);
+        Params.push_back(parm);
+      }
+      NewDecl->setParams(Params);
+    }
+    NewDecl->setImplicit(FnDecl->isImplicit());
+    SourceLocation TrueNameLocation = FnDecl->getLocation();
+    StringRef TrueOldName = FnDecl->getName();
+
+    // Gives us the equivalent of adding the asm label: void foo (void)
+    // asm("bar") Model the new function declaration after the asm("...")
+    // label extension, which gives us teh functionality we want!
+    // Make sure to use the ACTUAL most derived old name!
+    NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
+                                          /*IsLiteralLabel=*/true,
+                                          TrueNameLocation));
+    NewDecl->setNonMemberOperator();
+    NewDecl->addAttr(TransparentAliasAttr::Create(Context, false,
+                                                  FnDecl, NameLoc));
+    PushOnScopeChains(NewDecl, CurScope);
+    return NewDecl;
+  }
+  Diag(NameLoc, diag::err_operator_binding_arg_not_function) << &FunctionName;
+  return nullptr;
+}
+
+NamedDecl *Sema::ActOnTransparentAliasDeclaration(
+    Scope *CurScope, SourceLocation AliasLoc, bool IsWeak,
+    SourceLocation WeakLoc, IdentifierInfo &NewName, SourceLocation NewNameLoc,
+    IdentifierInfo &OldName, SourceLocation OldNameLoc,
+    const ParsedAttributesView &DeclarationAttrList,
+    const ParsedAttributesView &AliasAttrList) {
+  StringRef OldNameStr = OldName.getName();
+  StringRef NewNameStr = NewName.getName();
+  DeclarationName OldNameDN(&OldName);
+  NamedDecl *OldDecl = nullptr;
+  bool OldTargetIsTransparentAlias = false;
+  bool OldTargetIsWeak = false;
+  int OldTargetSuccessfulLookups = 0;
+  bool OldTargetLookup = lookupMaybeTransparentAliasDecl(
+      &OldDecl, &OldTargetIsTransparentAlias, &OldTargetIsWeak,
+      &OldTargetSuccessfulLookups, *this, CurScope, OldNameDN, OldNameLoc,
+      LangOpts, true);
+  if (!OldTargetLookup) {
+    if (OldDecl != nullptr) {
+      // we were able to look things up, but it was not
+      // a function!
+      Diag(OldNameLoc, diag::err_transparent_alias_bad_target)
+          << &OldName;
+      return nullptr;
+    } else {
+      Diag(OldNameLoc, diag::err_undeclared_var_use) << &OldName;
+      return nullptr;
+    }
+  }
+
+  DeclarationName NewNameDN(&NewName);
+  NamedDecl *NewDeclLookup = nullptr;
+  bool NewIsTransparentAlias = false;
+  bool NewIsWeak = false;
+  int NewSuccesfulLookups = 0;
+  // If we don't find the new name, then we don't have to do anything.
+  // But if we DO find the new name (after one level of lookup)...
+  if (lookupMaybeTransparentAliasDecl(&NewDeclLookup, &NewIsTransparentAlias,
+                                      &NewIsWeak, &NewSuccesfulLookups, *this,
+                                      CurScope, NewNameDN, NewNameLoc, LangOpts,
+                                      false)) {
+    // Check if it's defined in the same scope. If it is, then we have to worry!
+    if (CurScope->isDeclScope(NewDeclLookup)) {
+      // It'd better be a weak alias, otherwise we have to
+      // check if it resolves to the same thing we're about to define it to be!
+      if (!NewIsTransparentAlias) {
+        Diag(NewNameLoc, diag::err_transparent_alias_cannot_redeclare)
+            << NewDeclLookup << 0;
+        return nullptr;
+      }
+      // okay, we have a transparent alias! check it over
+      if (!NewIsWeak) {
+        // the decls we are about to define better match EXACTLY, or we're
+        // in trouble
+        NamedDecl *NewTargetDeclLookup = nullptr;
+        bool NewTargetIsTransparentAlias = false;
+        bool NewTargetIsWeak = false;
+        int NewTargetSuccesfulLookups = 0;
+        bool NewTargetLookup = lookupMaybeTransparentAliasDecl(
+            &NewTargetDeclLookup, &NewTargetIsTransparentAlias,
+            &NewTargetIsWeak, &NewTargetSuccesfulLookups, *this, CurScope,
+            NewNameDN, NewNameLoc, LangOpts, true);
+        (void)NewTargetLookup;
+        assert(NewTargetLookup &&
+               "if we found a new target before, this should "
+               "not suddenly fail us now!");
+        if (OldDecl != NewTargetDeclLookup) {
+          // They are not equal: issue a diagnostic and get out of here.
+          Diag(NewNameLoc, diag::err_transparent_alias_bad_redeclaration)
+              << &NewName << &OldName << OldDecl;
+          return nullptr;
+        } else {
+          // The declarations are exactly the same.
+          // That means, if the new name is the same as the old one,
+          // we need to simply bail because the job is done.
+          // FIXME: add attributes from this declaration to previous one!
+          if (OldNameStr == NewNameStr)
+            return NewDeclLookup;
+        }
+      } else {
+        // if it's new and weak, it must be destroyed:
+        // NewIsWeak being true is all that's needed
+        // to detect this case.
+        // FIXME: redeclaration of weak aliases is currently not implemented T_T
+        Diag(NewNameLoc, diag::err_unavailable)
+            << "_Weak _Alias redeclarations are not implemented: it";
+        return nullptr;
+      }
+    }
+  }
+  FunctionDecl *OldFunctionDecl = OldDecl->getAsFunction();
+  QualType NewType = OldFunctionDecl->getType();
+  StringRef TrueOldName = OldFunctionDecl->getName();
+  DeclContext *DC = CurScope->getEntity();
+  // We want a static function, since under no circumstances should this leak
+  // beyond the parameters of this translation unit!
+  FunctionDecl *NewDecl = FunctionDecl::Create(
+      Context, DC, AliasLoc, NewNameLoc, NewNameDN, NewType, nullptr, SC_Static,
+      false, false, OldFunctionDecl->hasWrittenPrototype(),
+      OldFunctionDecl->getConstexprKind(), nullptr);
+  // Create Decl objects for each parameter, adding them to the
+  // FunctionDecl.
+  if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(NewType)) {
+    SmallVector<ParmVarDecl *, 16> Params;
+    for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i) {
+      ParmVarDecl *parm = ParmVarDecl::Create(
+          Context, NewDecl, SourceLocation(), SourceLocation(), nullptr,
+          FT->getParamType(i), /*TInfo=*/nullptr, SC_None, nullptr);
+      parm->setScopeInfo(0, i);
+      Params.push_back(parm);
+    }
+    NewDecl->setParams(Params);
+  }
+  NewDecl->setImplicit(OldDecl->isImplicit());
+  ProcessDeclAttributeList(CurScope, NewDecl, AliasAttrList);
+  ProcessDeclAttributeList(CurScope, NewDecl, DeclarationAttrList);
+  // Gives us the equivalent of adding the asm label: void foo (void) asm("bar")
+  // Model the new function declaration after the asm("...")
+  // label extension, which gives us teh functionality we want!
+  // Make sure to use the ACTUAL most derived old name!
+  NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
+                                        /*IsLiteralLabel=*/true, OldNameLoc));
+  if (IsWeak) {
+    // Mark the function declaration as weak!
+    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, AttributeCommonInfo::AS_Keyword));
+  }
+  NewDecl->addAttr(TransparentAliasAttr::Create(Context, IsWeak, OldFunctionDecl, AliasLoc));
+  PushOnScopeChains(NewDecl, CurScope);
+  return NewDecl;
+}
+
 /// Determine whether a declaration matches a known function in namespace std.
 static bool isStdBuiltin(ASTContext &Ctx, FunctionDecl *FD,
                          unsigned BuiltinID) {

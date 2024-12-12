@@ -14339,6 +14339,7 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
   // Add the candidates from the given function set.
   AddNonMemberOperatorCandidates(Fns, ArgsArray, CandidateSet);
 
+  if (LangOpts.CPlusPlus) {
   // Add operator candidates that are member functions.
   AddMemberOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
 
@@ -14351,7 +14352,7 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
 
   // Add builtin operator candidates.
   AddBuiltinOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
-
+  }
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
 
   // Perform overload resolution.
@@ -14493,6 +14494,10 @@ void Sema::LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
   // rewritten candidates using these functions if necessary.
   AddNonMemberOperatorCandidates(Fns, Args, CandidateSet);
 
+  if (!LangOpts.CPlusPlus) {
+    return;
+  }
+  
   // Add operator candidates that are member functions.
   AddMemberOperatorCandidates(Op, OpLoc, Args, CandidateSet);
   if (CandidateSet.getRewriteInfo().allowsReversed(Op))

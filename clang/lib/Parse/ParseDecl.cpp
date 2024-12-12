@@ -2080,6 +2080,13 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
     return ParseUsingDirectiveOrDeclaration(Context, ParsedTemplateInfo(),
                                             DeclEnd, Attrs);
   }
+  case tok::kw__Operator:
+    SingleDecl = ParseOperatorBinding(Context, DeclEnd);
+    break;
+  case tok::kw__Alias:
+  case tok::kw__Weak:
+    SingleDecl = ParseTransparentAlias(Context, DeclEnd, attrs);
+    break;
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
     ProhibitAttributes(DeclAttrs);
