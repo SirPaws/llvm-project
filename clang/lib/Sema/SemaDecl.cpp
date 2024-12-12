@@ -9828,11 +9828,8 @@ OverloadedOperatorKind GetOperatorBindingKind(Token OpToken) {
   }
 }
 
-NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken, unsigned int NumTypes,
-                                      TypeResult &FirstType,
-                                      TypeResult &SecondType,
-                                      SourceLocation NameLoc,
-                                      IdentifierInfo &FunctionName) {
+NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken,
+                                      SourceLocation NameLoc, IdentifierInfo &FunctionName) {
   DeclarationName DeclName(&FunctionName);
   LookupResult NameLookup(*this, DeclName, NameLoc,
                           Sema::LookupOrdinaryName);
@@ -9844,39 +9841,24 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
 
   NamedDecl *FoundDecl = NameLookup.getFoundDecl();
   if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
-    if (FnDecl->getNumParams() != NumTypes) {
-        return nullptr;
-    }
-    auto GetType = [](auto Ast) {
-        if constexpr (std::is_convertible_v < decltype(Ast), ParmVarDecl *>) {
-          return Ast->getType();
-        } else {
-          return Ast.get();
-        }
-    };
-    auto isSameType = [GetType](ASTContext& Context, ParsedType& Type, ParmVarDecl *ParameterType) {
-      QualType QualifiedType = GetType(Type);
-      QualType CanonicalType = QualifiedType.getCanonicalType();
-
-      QualType QualifiedParamterType = GetType(ParameterType);
-      QualType CanonicalParamterType = QualifiedType.getCanonicalType();
-      return Context.hasSameUnqualifiedType(CanonicalType, CanonicalParamterType)
-          && (QualifiedParamterType.getQualifiers() ==
-                 QualifiedType.getQualifiers());
-    };
-
-    if (!isSameType(Context, FirstType.get(), FnDecl->getParamDecl(0))) {
+    auto NumParam = FnDecl->getNumParams(); 
+    if (NumParam < 1 || NumParam > 2) {
       Diag(NameLoc, diag::err_operator_binding_type_mismatch);
       return nullptr;
     }
+    auto GetParamType = [&FnDecl](unsigned int n) {
+      return FnDecl->getParamDecl(0)->getType();
+    };
 
-    if (NumTypes == 2) {
-      if (!isSameType(Context, SecondType.get(), FnDecl->getParamDecl(1))) {
-        Diag(NameLoc, diag::err_operator_binding_type_mismatch);
-        return nullptr;
-      }
+    if (!isa<RecordType>(GetParamType(0)) && NumParam == 1) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+      return nullptr;
     }
-
+    
+    if (NumParam == 2 && !isa<RecordType>(GetParamType(1))) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+      return nullptr;
+    }
        
       OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
     if (OperatorKind == OverloadedOperatorKind::OO_None) {
@@ -9914,7 +9896,12 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
     NewDecl->setImplicit(FnDecl->isImplicit());
     SourceLocation TrueNameLocation = FnDecl->getLocation();
     StringRef TrueOldName = FnDecl->getName();
-
+    
+    if (FnDecl->hasAttr<AsmLabelAttr>()) {
+      auto Label = FnDecl->getAttr<AsmLabelAttr>();
+      TrueOldName = Label->getLabel();
+    }
+    
     // Gives us the equivalent of adding the asm label: void foo (void)
     // asm("bar") Model the new function declaration after the asm("...")
     // label extension, which gives us teh functionality we want!
@@ -10056,7 +10043,7 @@ NamedDecl *Sema::ActOnTransparentAliasDeclaration(
                                         /*IsLiteralLabel=*/true, OldNameLoc));
   if (IsWeak) {
     // Mark the function declaration as weak!
-    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, AttributeCommonInfo::AS_Keyword));
+    NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, WeakAttr::Spelling::C23_gnu_weak));
   }
   NewDecl->addAttr(TransparentAliasAttr::Create(Context, IsWeak, OldFunctionDecl, AliasLoc));
   PushOnScopeChains(NewDecl, CurScope);

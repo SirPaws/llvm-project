@@ -3552,6 +3552,18 @@ public:
   /// and if so, check that it's a valid override and remember it.
   bool AddOverriddenMethods(CXXRecordDecl *DC, CXXMethodDecl *MD);
 
+  NamedDecl *ActOnOperatorBinding(
+      Scope *S, SourceLocation OperatorKeywordLoc,
+      Token OpToken, SourceLocation NameLoc,
+      IdentifierInfo &FunctionNamee);
+
+  NamedDecl *ActOnTransparentAliasDeclaration(
+      Scope *S, SourceLocation AliasLoc, bool IsWeak, SourceLocation WeakLoc,
+      IdentifierInfo &NewName, SourceLocation NewNameLoc,
+      IdentifierInfo &OldName, SourceLocation OldNameLoc,
+      const ParsedAttributesView &DeclarationAttrList,
+      const ParsedAttributesView &AliasAttrList);
+      
   /// Perform semantic checking of a new function declaration.
   ///
   /// Performs semantic analysis of the new function declaration

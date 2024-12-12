@@ -9,7 +9,7 @@ typedef struct vec3 { float x, y, z; } vec3;
 vec3 add_vector3(vec3 a, vec3 b) {
   return (vec3){ a.x + b.x, a.y + b.y, a.z + b.z };
 }
-_Operator(+, vec3, vec3, add_vector3);
+_Operator(+) add_vector3;
 
 int main(void) {
   vec3 a = { 1, 2, 3};
