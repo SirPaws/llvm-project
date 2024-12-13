@@ -1,6 +1,9 @@
 this branch adds a new keyword to C (not C++). namely the `_Operator` keyword. which allows operator overloading in C. 
 
-The Idea wasn't mine, it was shamelessly stolen from this [tweet](https://twitter.com/__phantomderp/status/1553407797613760513)
+The Idea wasn't mine, it was shamelessly stolen from this [tweet](https://twitter.com/__phantomderp/status/1553407797613760513),
+it also relies on work done by ThePhD to actually get it working, which is why this branch also has Transparent Function Aliases as part of it.
+
+Small difference between that and this is that the alias keyword is _Aliasdef (or _Weakdef) instead of _Alias due to msvc having used it in their headers
 
 here is a short example showing how this extension works
 ```c
