@@ -9846,8 +9846,9 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
       Diag(NameLoc, diag::err_operator_binding_type_mismatch);
       return nullptr;
     }
-    auto GetParamType = [&FnDecl](unsigned int n) {
-      return FnDecl->getParamDecl(0)->getType();
+    auto GetParamType = [this, &FnDecl](unsigned int n) {
+      auto type = FnDecl->getParamDecl(n)->getType();
+      return type.getDesugaredType(Context);
     };
 
     if (!isa<RecordType>(GetParamType(0)) && NumParam == 1) {

@@ -727,8 +727,8 @@ KEYWORD(_Nullable_result         , KEYALL)
 KEYWORD(_Null_unspecified        , KEYALL)
 
 // N2901 Transparent Function Aliases
-KEYWORD(__Alias                  , KEYALL)
-KEYWORD(__Weak                   , KEYALL)
+KEYWORD(_Aliasdef                  , KEYALL)
+KEYWORD(_Weakdef                   , KEYALL)
 
 // WebAssembly Type Extension
 KEYWORD(__funcref                     , KEYALL)

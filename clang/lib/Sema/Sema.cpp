@@ -961,6 +961,7 @@ static void checkUndefinedButUsed(Sema &S) {
       // be defined anywhere else, so the program must necessarily violate the
       // one definition rule.
       bool IsImplicitBase = false;
+      bool SuppressUndefinedInternal = false;
       if (const auto *BaseD = dyn_cast<FunctionDecl>(VD)) {
         auto *DVAttr = BaseD->getAttr<OMPDeclareVariantAttr>();
         if (DVAttr && !DVAttr->getTraitInfo().isExtensionActive(
@@ -971,8 +972,14 @@ static void checkUndefinedButUsed(Sema &S) {
           IsImplicitBase = BaseD->isImplicit() &&
                            Func->getIdentifier()->isMangledOpenMPVariantName();
         }
+        auto *TAAttr = BaseD->getAttr<TransparentAliasAttr>();
+        if (TAAttr) {
+          // It is okay: transparent function aliases do not need a definition.
+          SuppressUndefinedInternal = true;
+        }
       }
-      if (!S.getLangOpts().OpenMP || !IsImplicitBase)
+      if (!SuppressUndefinedInternal &&
+          (!S.getLangOpts().OpenMP || !IsImplicitBase))
         S.Diag(VD->getLocation(), diag::warn_undefined_internal)
             << isa<VarDecl>(VD) << VD;
     } else if (auto *FD = dyn_cast<FunctionDecl>(VD)) {

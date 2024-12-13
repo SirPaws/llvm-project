@@ -2083,10 +2083,12 @@ Parser::DeclGroupPtrTy Parser::ParseDeclaration(DeclaratorContext Context,
   case tok::kw__Operator:
     SingleDecl = ParseOperatorBinding(Context, DeclEnd);
     break;
-  case tok::kw__Alias:
-  case tok::kw__Weak:
+  case tok::kw__Aliasdef:
+  case tok::kw__Weakdef: {
+    ParsedAttributes Attrs(AttrFactory);
     SingleDecl = ParseTransparentAlias(Context, DeclEnd, Attrs);
     break;
+  }
   case tok::kw_static_assert:
   case tok::kw__Static_assert:
     ProhibitAttributes(DeclAttrs);
@@ -2145,6 +2147,12 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
   }
   ConsumeToken();
 
+  if (T.consumeClose()) {
+    Diag(Tok, diag::err_expected) << tok::r_paren;
+    SkipMalformedDecl();
+    return nullptr;
+  }
+  
   Token IdentifierToken = Tok;
   if (expectIdentifier()) {
     Diag(Tok, diag::err_expected) << tok::identifier;
@@ -2152,11 +2160,6 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
     return nullptr;
   }
   ConsumeToken();
-  if (T.consumeClose()) {
-    Diag(Tok, diag::err_expected) << tok::l_paren;
-    SkipMalformedDecl();
-    return nullptr;
-  }
 
   DeclEnd = Tok.getLocation();
   if (ExpectAndConsumeSemi(diag::err_expected)) {
@@ -2192,13 +2195,13 @@ Parser::ParseTransparentAlias(DeclaratorContext Context, SourceLocation &DeclEnd
   }
   bool IsWeak = false;
   SourceLocation WeakLoc;
-  if (Tok.is(tok::kw__Weak)) {
+  if (Tok.is(tok::kw__Weakdef)) {
     IsWeak = true;
     WeakLoc = Tok.getLocation();
     ConsumeToken();
   }
   SourceLocation AliasLoc = Tok.getLocation();
-  if (ExpectAndConsume(tok::kw__Alias)) {
+  if (ExpectAndConsume(tok::kw__Aliasdef)) {
     return nullptr;
   }
   if (expectIdentifier()) {

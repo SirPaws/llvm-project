@@ -2979,21 +2979,6 @@ public:
   /// Used to indicate that names should revert to being looked up in the
   /// defining scope.
   void ActOnCXXExitDeclaratorScope(Scope *S, const CXXScopeSpec &SS);
-
-  NamedDecl *ActOnOperatorBinding(
-      Scope *S, SourceLocation OperatorKeywordLoc,
-      Token OpToken, unsigned int NumTypes,
-      TypeResult &FirstType, TypeResult &SecondType,
-      SourceLocation NameLoc,
-      IdentifierInfo &FunctionNamee);
-
-  NamedDecl *ActOnTransparentAliasDeclaration(
-      Scope *S, SourceLocation AliasLoc, bool IsWeak, SourceLocation WeakLoc,
-      IdentifierInfo &NewName, SourceLocation NewNameLoc,
-      IdentifierInfo &OldName, SourceLocation OldNameLoc,
-      const ParsedAttributesView &DeclarationAttrList,
-      const ParsedAttributesView &AliasAttrList);
-
   ///@}
 
   //

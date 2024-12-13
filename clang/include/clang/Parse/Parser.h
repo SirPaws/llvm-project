@@ -3308,8 +3308,7 @@ private:
                             SourceLocation &DeclEnd,
                             ParsedAttributes &attrs);
   Decl *ParseTransparentAlias(DeclaratorContext Context,
-                              SourceLocation &DeclEnd,
-                              ParsedAttributesWithRange &attrs);
+                              SourceLocation &DeclEnd, ParsedAttributes &attrs);
 
   Decl *ParseOperatorBinding(DeclaratorContext Context,
                               SourceLocation &DeclEnd);
