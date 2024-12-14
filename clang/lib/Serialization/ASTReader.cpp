@@ -7742,13 +7742,20 @@ void ASTReader::CompleteRedeclChain(const Decl *D) {
     if (DeclarationName Name = cast<NamedDecl>(D)->getDeclName()) {
       if (!getContext().getLangOpts().CPlusPlus &&
           isa<TranslationUnitDecl>(DC)) {
+        auto *TAAttr = D->getAttr<TransparentAliasAttr>();
+
         // Outside of C++, we don't have a lookup table for the TU, so update
         // the identifier instead. (For C++ modules, we don't store decls
         // in the serialized identifier table, so we do the lookup in the TU.)
-        auto *II = Name.getAsIdentifierInfo();
+        // If this declaration is a transparent alias we use the target name instead
+        IdentifierInfo *II;
+        if (TAAttr) {
+          II = TAAttr->getTargetDecl()->getDeclName().getAsIdentifierInfo();
+        } else II = Name.getAsIdentifierInfo();
         assert(II && "non-identifier name in C?");
         if (II->isOutOfDate())
           updateOutOfDateIdentifier(*II);
+        
       } else
         DC->lookup(Name);
     } else if (needsAnonymousDeclarationNumber(cast<NamedDecl>(D))) {
