@@ -8429,12 +8429,16 @@ def err_capture_block_variable : Error<
   "__block variable %0 cannot be captured in a "
   "%select{lambda expression|captured statement}1">;
 
+def err_operator_binding_invalid_operator : Error<
+    "%0 is not an overloadable operator">;
+def note_operator_binding_valid_operators : Note<
+    "the supported operators are: '+', '-', '*', '/', '%%', '^', '&', '|', '~', '!', '<', '>', '<<', '>>', '==', '!=', '<=', '>=', '&&', '||'">;
 def err_operator_binding_arg_not_function : Error<
     "'_Operator' argument %0 is not a function">;
-def err_operator_binding_invalid_binary_op : Error<
-    "'_Operator' types do not match the types of the functions arguments">;
+def err_operator_binding_num_parameters : Error<
+    "operator %0 expects %select{a single operand|two operands|one or two operands}1 but function %2 has %3 %select{parameter|parameters}4">;
 def err_operator_binding_type_mismatch : Error<
-    "token is not a valid binary operator">;
+    "operator binding requires at least one of the parameters types for function %0 must be a struct or union">;
 
 def err_operator_arrow_circular : Error<
   "circular pointer delegation detected">;

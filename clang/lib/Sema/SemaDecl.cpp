@@ -9828,11 +9828,65 @@ OverloadedOperatorKind GetOperatorBindingKind(Token OpToken) {
   }
 }
 
+std::pair<size_t, size_t> GetExpectedParameterRangeForOperator(Token OpToken) {
+  switch (OpToken.getKind()) {
+  case tok::plus:
+    return {1, 2};
+  case tok::minus:
+    return {1, 2};
+  case tok::star:
+    return {1, 2};
+  case tok::slash:
+    return {2, 2};
+  case tok::percent:
+    return {2, 2};
+  case tok::caret:
+    return {2, 2};
+  case tok::amp:
+    return {1, 2};
+  case tok::pipe:
+    return {2, 2};
+  case tok::less:
+    return {2, 2};
+  case tok::greater:
+    return {2, 2};
+  case tok::lessless:
+    return {2, 2};
+  case tok::greatergreater:
+    return {2, 2};
+  case tok::equalequal:
+    return {2, 2};
+  case tok::exclaimequal:
+    return {2, 2};
+  case tok::lessequal:
+    return {2, 2};
+  case tok::greaterequal:
+    return {2, 2};
+  case tok::ampamp:
+    return {2, 2};
+  case tok::pipepipe:
+    return {2, 2};
+  case tok::tilde:
+    return {1, 1};
+  case tok::exclaim:
+    return {1, 1};
+  default:
+    return {0, 0};
+  }
+}
+
 NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLoc, Token OpToken,
                                       SourceLocation NameLoc, IdentifierInfo &FunctionName) {
   DeclarationName DeclName(&FunctionName);
   LookupResult NameLookup(*this, DeclName, NameLoc,
                           Sema::LookupOrdinaryName);
+
+  OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
+  if (OperatorKind == OverloadedOperatorKind::OO_None) {
+    Diag(OpToken.getLocation(), diag::err_operator_binding_invalid_operator)
+        << OpToken.getKind();
+    return nullptr;
+  }
 
   if (!LookupName(NameLookup, S)) {
     Diag(NameLoc, diag::err_undeclared_var_use) << &FunctionName;
@@ -9842,8 +9896,20 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
   NamedDecl *FoundDecl = NameLookup.getFoundDecl();
   if (FunctionDecl *FnDecl = FoundDecl->getAsFunction()) {
     auto NumParam = FnDecl->getNumParams(); 
-    if (NumParam < 1 || NumParam > 2) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+    auto [Min, Max] = GetExpectedParameterRangeForOperator(OpToken);
+    if (NumParam < Min || NumParam > Max) {
+      bool SingleParameter = ((Min == Max) && Min == 1);
+      bool TwoParameter = ((Min == Max) && Min == 2);
+      bool RangeParameter = (Min != Max);
+      int Selector = SingleParameter  ? 0
+                     : TwoParameter   ? 1
+                     : RangeParameter ? 2
+                                      : -1;
+      assert(Selector != -1 &&
+             "somehow an operator has more than 2 operands or less than 1");
+      Diag(NameLoc, diag::err_operator_binding_num_parameters)
+              << OpToken.getKind() << Selector << &FunctionName << NumParam << (NumParam != 1);
+      Diag(FoundDecl->getLocation(), diag::note_defined_here) << FoundDecl;
       return nullptr;
     }
     auto GetParamType = [this, &FnDecl](unsigned int n) {
@@ -9852,18 +9918,14 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
     };
 
     if (!isa<RecordType>(GetParamType(0)) && NumParam == 1) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch) << &FunctionName;
+      Diag(FoundDecl->getLocation(), diag::note_defined_here) << FoundDecl;
       return nullptr;
     }
     
-    if (NumParam == 2 && !isa<RecordType>(GetParamType(1))) {
-      Diag(NameLoc, diag::err_operator_binding_type_mismatch);
-      return nullptr;
-    }
-       
-      OverloadedOperatorKind OperatorKind = GetOperatorBindingKind(OpToken);
-    if (OperatorKind == OverloadedOperatorKind::OO_None) {
-      Diag(OpToken.getLocation(), diag::err_operator_binding_invalid_binary_op);
+    if (NumParam == 2 && !(isa<RecordType>(GetParamType(1)) || isa<RecordType>(GetParamType(0)))) {
+      Diag(NameLoc, diag::err_operator_binding_type_mismatch) << &FunctionName;
+      Diag(FoundDecl->getLocation(), diag::note_defined_here) << FoundDecl;
       return nullptr;
     }
 

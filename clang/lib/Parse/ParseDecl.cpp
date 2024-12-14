@@ -2139,10 +2139,8 @@ Decl *Parser::ParseOperatorBinding(DeclaratorContext Context, SourceLocation &De
       tok::less, tok::greater, tok::lessless, tok::greatergreater,
       tok::equalequal, tok::exclaimequal, tok::lessequal,
       tok::greaterequal, tok::ampamp, tok::pipepipe)) {
-    Diag(diag::err_type_unsupported) << "token is not an overloadable operator\n"
-             "the supported operators are: "
-        "'+', '-', '*', '/', '%', '^', '&', '|', '~', '!', '<', '>', '<<', '>>', '==', '!=', '<=', '>=', '&&', '||'"
-        ;
+    Diag(diag::err_operator_binding_invalid_operator) << OpToken.getKind();
+    Diag(diag::note_operator_binding_valid_operators);
     return nullptr;
   }
   ConsumeToken();
