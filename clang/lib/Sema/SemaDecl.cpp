@@ -10159,10 +10159,9 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
 
     FunctionDecl *NewDecl = FunctionDecl::Create(
         Context, DC, OperatorKeywordLoc, NameLoc, NameInfo.getName(),
-        FnDecl->getType(),
-        nullptr,
+        FnDecl->getType(), FnDecl->getTypeSourceInfo(),
         SC_Static, false, false, FnDecl->hasWrittenPrototype(),
-        FnDecl->getConstexprKind(), nullptr);
+        FnDecl->getConstexprKind());
     if (const FunctionProtoType *FT =
             dyn_cast<FunctionProtoType>(FnDecl->getType())) {
       SmallVector<ParmVarDecl *, 16> Params;
@@ -10188,9 +10187,7 @@ NamedDecl *Sema::ActOnOperatorBinding(Scope *S, SourceLocation OperatorKeywordLo
     // asm("bar") Model the new function declaration after the asm("...")
     // label extension, which gives us teh functionality we want!
     // Make sure to use the ACTUAL most derived old name!
-    NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
-                                          /*IsLiteralLabel=*/true,
-                                          TrueNameLocation));
+    NewDecl->addAttr(AsmLabelAttr::CreateImplicit(Context, TrueOldName, TrueNameLocation));
     NewDecl->setNonMemberOperator();
     NewDecl->addAttr(TransparentAliasAttr::Create(Context, false,
                                                   FnDecl, NameLoc));
@@ -10300,7 +10297,7 @@ NamedDecl *Sema::ActOnTransparentAliasDeclaration(
   FunctionDecl *NewDecl = FunctionDecl::Create(
       Context, DC, AliasLoc, NewNameLoc, NewNameDN, NewType, nullptr, SC_Static,
       false, false, OldFunctionDecl->hasWrittenPrototype(),
-      OldFunctionDecl->getConstexprKind(), nullptr);
+      OldFunctionDecl->getConstexprKind());
   // Create Decl objects for each parameter, adding them to the
   // FunctionDecl.
   if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(NewType)) {
@@ -10321,8 +10318,7 @@ NamedDecl *Sema::ActOnTransparentAliasDeclaration(
   // Model the new function declaration after the asm("...")
   // label extension, which gives us teh functionality we want!
   // Make sure to use the ACTUAL most derived old name!
-  NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName,
-                                        /*IsLiteralLabel=*/true, OldNameLoc));
+  NewDecl->addAttr(AsmLabelAttr::Create(Context, TrueOldName, OldNameLoc));
   if (IsWeak) {
     // Mark the function declaration as weak!
     NewDecl->addAttr(WeakAttr::Create(Context, WeakLoc, WeakAttr::Spelling::C23_gnu_weak));

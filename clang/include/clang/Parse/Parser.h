@@ -3216,6 +3216,13 @@ private:
   ///
   Decl *ParseExportDeclaration();
 
+
+  /// ParseUsingDirectiveOrDeclaration - Parse C++ using using-declaration or
+  /// using-directive. Assumes that current token is 'using'.
+  DeclGroupPtrTy ParseUsingDirectiveOrDeclaration(
+      DeclaratorContext Context, const ParsedTemplateInfo &TemplateInfo,
+      SourceLocation &DeclEnd, ParsedAttributes &Attrs);
+
   /// ParseUsingDirective - Parse C++ using-directive, assumes
   /// that current token is 'namespace' and 'using' was already parsed.
   ///
@@ -3231,10 +3238,6 @@ private:
   Decl *ParseUsingDirective(DeclaratorContext Context, SourceLocation UsingLoc,
                             SourceLocation &DeclEnd, ParsedAttributes &attrs);
 
-  Decl *ParseUsingDirective(DeclaratorContext Context,
-                            SourceLocation UsingLoc,
-                            SourceLocation &DeclEnd,
-                            ParsedAttributes &attrs);
   Decl *ParseTransparentAlias(DeclaratorContext Context,
                               SourceLocation &DeclEnd, ParsedAttributes &attrs);
 

@@ -14988,18 +14988,18 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
   AddNonMemberOperatorCandidates(Fns, ArgsArray, CandidateSet);
 
   if (LangOpts.CPlusPlus) {
-  // Add operator candidates that are member functions.
-  AddMemberOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
+    // Add operator candidates that are member functions.
+    AddMemberOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
 
-  // Add candidates from ADL.
-  if (PerformADL) {
-    AddArgumentDependentLookupCandidates(OpName, OpLoc, ArgsArray,
+    // Add candidates from ADL.
+    if (PerformADL) {
+        AddArgumentDependentLookupCandidates(OpName, OpLoc, ArgsArray,
                                          /*ExplicitTemplateArgs*/nullptr,
                                          CandidateSet);
-  }
+    }
 
-  // Add builtin operator candidates.
-  AddBuiltinOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
+     // Add builtin operator candidates.
+    AddBuiltinOperatorCandidates(Op, OpLoc, ArgsArray, CandidateSet);
   }
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
 
