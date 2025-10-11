@@ -1,6 +1,6 @@
-// RUN: %check_clang_tidy %s modernize-use-equals-default %t -- \
+// RUN: %check_clang_tidy --match-partial-fixes %s modernize-use-equals-default %t -- \
 // RUN:   -config="{CheckOptions: {modernize-use-equals-default.IgnoreMacros: false}}" \
-// RUN:   -- -fno-delayed-template-parsing -fexceptions
+// RUN:   -- -fno-delayed-template-parsing -fexceptions -Wno-error=return-type
 
 // Out of line definition.
 struct OL {
@@ -147,7 +147,7 @@ struct BF {
   BF(const BF &Other) : Field1(Other.Field1), Field2(Other.Field2), Field3(Other.Field3),
                         Field4(Other.Field4) {};
   // CHECK-MESSAGES: :[[@LINE-2]]:3: warning: use '= default'
-  // CHECK-FIXES: BF(const BF &Other) {{$}}
+  // CHECK-FIXES: BF(const BF &Other)
   // CHECK-FIXES:                     = default;
   BF &operator=(const BF &);
 
